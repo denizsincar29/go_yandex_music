@@ -14,12 +14,16 @@ import (
 	"github.com/joho/godotenv"
 )
 
+const version = "1.0.0"
+
 func main() {
 	l := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	e := goerror.NewError(l)
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
-	err := godotenv.Load()
+	err := update(ctx, version)
+	e.Must(err)
+	err = godotenv.Load()
 	e.Must(err)
 	token := os.Getenv("YA_MUSIC_TOKEN")
 	uid, err := strconv.Atoi(os.Getenv("YA_MUSIC_ID"))

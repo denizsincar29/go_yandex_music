@@ -1,3 +1,6 @@
 *.exe
 .env
 downloads/*
+# Added by goreleaser init:
+dist/
+build/

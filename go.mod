@@ -3,6 +3,7 @@ module yamusic
 go 1.24.1
 
 require (
+	github.com/creativeprojects/go-selfupdate v1.5.0
 	github.com/denizsincar29/goerror v0.0.0-20250401143956-549d4fe59737
 	github.com/ebitengine/oto/v3 v3.3.3
 	github.com/hajimehoshi/go-mp3 v0.3.4
@@ -14,7 +15,6 @@ require (
 	code.gitea.io/sdk/gitea v0.21.0 // indirect
 	github.com/42wim/httpsig v1.2.2 // indirect
 	github.com/Masterminds/semver/v3 v3.3.1 // indirect
-	github.com/creativeprojects/go-selfupdate v1.5.0 // indirect
 	github.com/davidmz/go-pageant v1.0.2 // indirect
 	github.com/ebitengine/purego v0.8.0 // indirect
 	github.com/go-fed/httpsig v1.1.0 // indirect

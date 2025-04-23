@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 
 	"github.com/denizsincar29/goerror"
 	"github.com/joho/godotenv"
@@ -27,21 +28,6 @@ func main() {
 	e.Must(err)
 	defer player.Close()
 	stdin := bufio.NewScanner(os.Stdin)
-	query := ""
-	fmt.Println("Enter your search query (or 'exit' to quit):")
-	stdin.Scan()
-	query = stdin.Text()
-	if query == "exit" {
-		fmt.Println("Exiting...")
-		return
-	}
-	_, err = player.SearchTracks(query)
-	e.Must(err)
-	player.PlayFirst()
-	fmt.Println("Playing first track...")
-	title, artist := player.GetCurrentTrack()
-	fmt.Printf("Now playing: %s - %s\n", title, artist)
-	fmt.Println("Press 'n' for next track, 'p' for previous track, or 'exit' to quit:")
 	for {
 		stdin.Scan()
 		// check for ctrl+c
@@ -53,7 +39,20 @@ func main() {
 			// continue
 		}
 		input := stdin.Text()
-		switch input {
+		cmd := strings.SplitN(input, " ", 2)
+		switch cmd[0] {
+		case "s", "search":
+			if len(cmd) < 2 {
+				fmt.Println("Please provide a search term.")
+				continue
+			}
+			searchTerm := cmd[1]
+			_, err := player.SearchTracks(searchTerm)
+			if err != nil {
+				fmt.Println("Error searching tracks:", err)
+				continue
+			}
+			player.PlayFirst()
 		case "n":
 			err := player.PlayNext()
 			if err != nil {

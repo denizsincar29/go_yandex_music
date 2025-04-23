@@ -45,7 +45,7 @@ go run .
 
 ### Controls
 
-- Enter search query to find tracks
+- `s <search query>` - Search for a track
 - `n` - Play next track
 - `p` - Play previous track
 - `pp` - Pause/Resume playback

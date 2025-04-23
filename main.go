@@ -53,6 +53,8 @@ func main() {
 				continue
 			}
 			player.PlayFirst()
+			title, artist := player.GetCurrentTrack()
+			fmt.Printf("Now playing: %s - %s\n", title, artist)
 		case "n":
 			err := player.PlayNext()
 			if err != nil {
@@ -78,8 +80,11 @@ func main() {
 				fmt.Println("Playing")
 			}
 		case "dl", "download":
+			title, artist := player.GetCurrentTrack()
+			fmt.Printf("Downloading: %s - %s\n", title, artist)
 			err := player.DownloadTrack("downloads/")
 			e.Check(err)
+			fmt.Println("Download complete.")
 		case "exit", "":
 			fmt.Println("Exiting...")
 			return

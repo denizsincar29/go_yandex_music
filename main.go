@@ -27,6 +27,7 @@ func main() {
 	player, err := NewPlayer(ctx, uid, token)
 	e.Must(err)
 	defer player.Close()
+	printWelcome()
 	stdin := bufio.NewScanner(os.Stdin)
 	for {
 		stdin.Scan()
@@ -41,6 +42,8 @@ func main() {
 		input := stdin.Text()
 		cmd := strings.SplitN(input, " ", 2)
 		switch cmd[0] {
+		case "h", "help":
+			printHelp()
 		case "s", "search":
 			if len(cmd) < 2 {
 				fmt.Println("Please provide a search term.")
@@ -89,7 +92,7 @@ func main() {
 			fmt.Println("Exiting...")
 			return
 		default:
-			fmt.Println("Invalid input. Please enter 'n', 'p', or 'exit'.")
+			fmt.Println("Invalid input. Type 'h' or 'help' for a list of commands.")
 		}
 	}
 

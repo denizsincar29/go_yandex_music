@@ -1,4 +1,4 @@
-module yamusic
+module go_yandex_music
 
 go 1.24.1
 

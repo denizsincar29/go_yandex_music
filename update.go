@@ -19,7 +19,7 @@ func update(ctx context.Context, version string) error {
 	}
 
 	if latest.LessOrEqual(version) {
-		fmt.Printf("Current version (%s) is the latest", version)
+		fmt.Printf("Current version (%s) is the latest\n", version)
 		return nil
 	}
 
@@ -30,6 +30,6 @@ func update(ctx context.Context, version string) error {
 	if err := selfupdate.UpdateTo(ctx, latest.AssetURL, latest.AssetName, exe); err != nil {
 		return fmt.Errorf("error occurred while updating binary: %w", err)
 	}
-	fmt.Printf("Successfully updated to version %s", latest.Version())
+	fmt.Printf("Successfully updated to version %s\n", latest.Version())
 	return nil
 }

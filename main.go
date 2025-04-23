@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	_ "embed"
 	"fmt"
 	"log/slog"
 	"os"
@@ -14,13 +15,18 @@ import (
 	"github.com/joho/godotenv"
 )
 
-const version = "1.0.0"
+//go:embed version.txt
+var version string
 
 func main() {
 	l := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	e := goerror.NewError(l)
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
+	fmt.Println("Yandex Music player")
+	if version != "" {
+		fmt.Println("Version:", version)
+	}
 	err := update(ctx, version)
 	e.Must(err)
 	err = godotenv.Load()

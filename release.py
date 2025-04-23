@@ -28,6 +28,6 @@ if file_version > tag_version:
     tag_message = input("Enter tag message: ")
     repo.create_tag("v"+new_tag, message=tag_message)
     # push the new tag to the remote repository
-    repo.git.push('origin', new_tag)  # GoReleaser, take it!
+    repo.git.push('origin', "v"+new_tag)  # GoReleaser, take it!
 else:
     print("No new tag created. The version in version.txt is not greater than the latest tag.")

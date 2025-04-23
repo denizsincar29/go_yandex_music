@@ -14,7 +14,7 @@ if repo.is_dirty(untracked_files=True):
 # find the latest tag
 latest_tag = repo.git.describe(tags=True, always=True, long=True).split('-')[0]
 print(f"Latest tag: {latest_tag}")
-tag_version = semantic_version.Version(latest_tag)
+tag_version = semantic_version.Version(latest_tag[1:])  # It so much doesn't like the 'v' prefix
 # compare it with version.txt
 with open('version.txt', 'r') as f:
     version = f.read().strip()

@@ -191,5 +191,4 @@ func (m *MusicPlayer) DownloadFile(filename string, url string) error {
 		return err
 	}
 	return nil
-
 }

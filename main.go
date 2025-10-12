@@ -28,7 +28,7 @@ func main() {
 		fmt.Println("Version:", version)
 	}
 	err := update(ctx, version)
-	e.Must(err)
+	e.Debug(err)
 	err = godotenv.Load()
 	e.Must(err)
 	token := os.Getenv("YA_MUSIC_TOKEN")
@@ -42,10 +42,14 @@ func main() {
 	for {
 		stdin.Scan()
 		// check for ctrl+c
+		//playing_done := player.finished
 		select {
 		case <-ctx.Done():
 			fmt.Println("Exiting...")
 			return
+			//case <-playing_done:
+			//	fmt.Println("Playing done")
+		//	player.PlayNext()
 		default:
 			// continue
 		}
@@ -54,20 +58,6 @@ func main() {
 		switch cmd[0] {
 		case "h", "help":
 			printHelp()
-		case "s", "search":
-			if len(cmd) < 2 {
-				fmt.Println("Please provide a search term.")
-				continue
-			}
-			searchTerm := cmd[1]
-			_, err := player.SearchTracks(searchTerm)
-			if err != nil {
-				fmt.Println("Error searching tracks:", err)
-				continue
-			}
-			player.PlayFirst()
-			title, artist := player.GetCurrentTrack()
-			fmt.Printf("Now playing: %s - %s\n", title, artist)
 		case "n":
 			err := player.PlayNext()
 			if err != nil {
@@ -102,7 +92,19 @@ func main() {
 			fmt.Println("Exiting...")
 			return
 		default:
-			fmt.Println("Invalid input. Type 'h' or 'help' for a list of commands.")
+			// if the input is <3 letters, skip it
+			if len(input) < 3 {
+				fmt.Println("The input is too short.")
+				continue
+			}
+			_, err := player.SearchTracks(input)
+			if err != nil {
+				fmt.Println("Error searching tracks:", err)
+				continue
+			}
+			player.PlayFirst()
+			title, artist := player.GetCurrentTrack()
+			fmt.Printf("Now playing: %s - %s\n", title, artist)
 		}
 	}
 

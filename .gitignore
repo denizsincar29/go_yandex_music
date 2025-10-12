@@ -4,3 +4,9 @@ downloads/*
 # Added by goreleaser init:
 dist/
 build/
+static/create_icons.sh
+static/icon-192.png.svg
+# Built binaries
+ya_music_cli
+ya_music_web
+web_server

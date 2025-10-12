@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Yandex Music PWA - Search, stream, and download music">
+    <meta name="theme-color" content="#6200ea">
+    <title>Yandex Music PWA</title>
+    <link rel="stylesheet" href="/css/styles.css">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/png" href="/icon-192.png">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Yandex Music Player</h1>
+            <p class="subtitle">Search, stream, and download your favorite tracks</p>
+        </header>
+
+        <main>
+            <!-- Search Section -->
+            <section class="search-section" aria-label="Search tracks">
+                <form id="search-form" role="search">
+                    <label for="search-input" class="sr-only">Search for tracks</label>
+                    <input 
+                        type="search" 
+                        id="search-input" 
+                        placeholder="Search for tracks, artists, or albums..." 
+                        aria-label="Search for tracks, artists, or albums"
+                        autocomplete="off"
+                        required
+                        minlength="3"
+                    >
+                    <button type="submit" aria-label="Search">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/>
+                        </svg>
+                        Search
+                    </button>
+                </form>
+            </section>
+
+            <!-- Current Track Info -->
+            <section class="current-track" aria-label="Currently playing track" aria-live="polite">
+                <div id="current-track-info" class="track-info-display">
+                    <div class="cover-placeholder" aria-hidden="true">
+                        <svg width="80" height="80" viewBox="0 0 80 80" fill="currentColor">
+                            <path d="M40 0C17.9 0 0 17.9 0 40s17.9 40 40 40 40-17.9 40-40S62.1 0 40 0zm0 72c-17.6 0-32-14.4-32-32S22.4 8 40 8s32 14.4 32 32-14.4 32-32 32z"/>
+                            <circle cx="40" cy="40" r="8"/>
+                        </svg>
+                    </div>
+                    <div class="track-details">
+                        <p class="no-track-message">No track loaded. Search for music to get started.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Audio Player -->
+            <section class="player-section" aria-label="Audio player">
+                <audio 
+                    id="audio-player" 
+                    controls 
+                    preload="metadata"
+                    aria-label="Audio player"
+                >
+                    Your browser does not support the audio element.
+                </audio>
+            </section>
+
+            <!-- Playback Controls -->
+            <section class="controls-section" aria-label="Playback controls">
+                <button id="prev-btn" class="control-btn" aria-label="Previous track" disabled>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
+                    </svg>
+                    Previous
+                </button>
+                <button id="next-btn" class="control-btn" aria-label="Next track" disabled>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>
+                    </svg>
+                    Next
+                </button>
+                <button id="download-btn" class="control-btn" aria-label="Download current track" disabled>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M19 12v7H5v-7H3v7c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2zm-6 .67l2.59-2.58L17 11.5l-5 5-5-5 1.41-1.41L11 12.67V3h2z"/>
+                    </svg>
+                    Download
+                </button>
+            </section>
+
+            <!-- Search Results -->
+            <section class="results-section" aria-label="Search results">
+                <div id="search-results" role="region" aria-live="polite" aria-atomic="true"></div>
+            </section>
+
+            <!-- Status Messages -->
+            <div id="status-message" role="status" aria-live="polite" aria-atomic="true" class="sr-only"></div>
+        </main>
+
+        <footer>
+            <p>&copy; 2025 Yandex Music PWA</p>
+        </footer>
+    </div>
+
+    <script src="/js/app.js"></script>
+</body>
+</html>

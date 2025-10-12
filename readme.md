@@ -68,6 +68,17 @@ go build -o web_server web_server.go web_main.go
    - In Chrome/Edge: Click the install icon in the address bar
    - In mobile browsers: Use "Add to Home Screen" option
 
+### API Endpoints
+
+The web server exposes the following REST API endpoints:
+
+- `GET /api/search?q=<query>` - Search for tracks
+  - Returns: JSON array of track results with metadata
+- `GET /api/download-url?id=<track_id>` - Get download URL for a track
+  - Returns: JSON object with streaming URL
+
+All endpoints return JSON and support CORS for browser access.
+
 ### CLI Application
 
 Run the CLI player:
@@ -100,9 +111,36 @@ go run .
   - `sw.js` - Service worker for offline support
 - `get_id.py` - Helper script for token setup
 
+## PWA Features
+
+The web application includes:
+
+- **Progressive Web App** - Installable on desktop and mobile devices
+- **Offline Support** - Service worker caches static assets for offline access
+- **Responsive Design** - Works seamlessly on mobile, tablet, and desktop
+- **Accessibility** - Full ARIA labels and screen reader support
+- **Native Audio Player** - Uses HTML5 audio element for maximum compatibility
+- **Touch-Friendly** - Optimized for touch and mouse input
+- **Dark Mode** - Respects system color scheme preferences
+- **Keyboard Navigation** - Full keyboard support for accessibility
+
+### Accessibility Features
+
+- ARIA labels on all interactive elements
+- Semantic HTML structure
+- Screen reader announcements for status updates
+- High contrast UI elements
+- Focus indicators for keyboard navigation
+- Reduced motion support for users with vestibular disorders
+- Proper heading hierarchy
+- Alternative text for images
+
 ## Dependencies
 
-- [oto](github.com/ebitengine/oto/v3) - Audio playback
-- [go-mp3](github.com/hajimehoshi/go-mp3) - MP3 decoding
+### Backend
 - [godotenv](github.com/joho/godotenv) - Environment configuration
 - [yamusic](pkg.botr.me/yamusic) - Yandex Music API client
+
+### CLI Only
+- [oto](github.com/ebitengine/oto/v3) - Audio playback
+- [go-mp3](github.com/hajimehoshi/go-mp3) - MP3 decoding

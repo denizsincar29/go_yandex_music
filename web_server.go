@@ -64,7 +64,7 @@ func NewWebServer(ctx context.Context) (*WebServer, error) {
 // handleSearch handles track search requests
 func (ws *WebServer) handleSearch(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	
+
 	query := r.URL.Query().Get("q")
 	if query == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -97,7 +97,7 @@ func (ws *WebServer) handleSearch(w http.ResponseWriter, r *http.Request) {
 				artistStr += artist.Name + ", "
 			}
 		}
-		
+
 		album := ""
 		coverURL := ""
 		if len(result.Albums) > 0 {
@@ -128,7 +128,7 @@ func (ws *WebServer) handleSearch(w http.ResponseWriter, r *http.Request) {
 // handleDownloadURL handles requests for track download URLs
 func (ws *WebServer) handleDownloadURL(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	
+
 	trackIDStr := r.URL.Query().Get("id")
 	if trackIDStr == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -159,12 +159,12 @@ func enableCORS(next http.HandlerFunc) http.HandlerFunc {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		
+
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		
+
 		next(w, r)
 	}
 }
@@ -180,7 +180,7 @@ func StartWebServer(port string) error {
 	// Serve static files
 	fs := http.FileServer(http.Dir("./static"))
 	http.Handle("/", fs)
-	
+
 	// API endpoints
 	http.HandleFunc("/api/search", enableCORS(ws.handleSearch))
 	http.HandleFunc("/api/download-url", enableCORS(ws.handleDownloadURL))

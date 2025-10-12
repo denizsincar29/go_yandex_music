@@ -46,13 +46,22 @@ python get_id.py
 
 1. Start the web server:
 ```sh
-go run web_server.go web_main.go
+cd cmd/web
+go run .
 ```
 
 Or build and run:
 ```sh
-go build -o web_server web_server.go web_main.go
-./web_server
+./build.sh
+./ya_music_web
+```
+
+Or build manually:
+```sh
+cd cmd/web
+go build -o ../../ya_music_web
+cd ../..
+./ya_music_web
 ```
 
 2. Open your browser and navigate to `http://localhost:8080`
@@ -83,8 +92,19 @@ All endpoints return JSON and support CORS for browser access.
 
 Run the CLI player:
 ```sh
+cd cmd/cli
 go run .
 ```
+
+Or build and run (requires ALSA/audio libraries on Linux):
+```sh
+cd cmd/cli
+go build -o ../../ya_music_cli
+cd ../..
+./ya_music_cli
+```
+
+**Note:** The CLI version requires audio libraries (ALSA on Linux, CoreAudio on macOS, etc.)
 
 ### CLI Controls
 
@@ -97,19 +117,31 @@ go run .
 
 ## Project Structure
 
-- `main.go` - CLI application entry point
-- `web_main.go` - Web server entry point
-- `web_server.go` - HTTP server and API handlers
-- `player.go` - Music player implementation
-- `play.go` - Audio streaming and playback (CLI only)
-- `structs.go` - Data structures
-- `static/` - Web application files
-  - `index.html` - Main HTML page
-  - `css/styles.css` - Styles with accessibility features
-  - `js/app.js` - JavaScript application
-  - `manifest.json` - PWA manifest
-  - `sw.js` - Service worker for offline support
-- `get_id.py` - Helper script for token setup
+```
+.
+├── cmd/
+│   ├── cli/                    # CLI application
+│   │   ├── main.go            # CLI entry point
+│   │   ├── player.go          # Music player implementation
+│   │   ├── play.go            # Audio streaming and playback
+│   │   ├── help.go            # CLI help and welcome messages
+│   │   ├── update.go          # Auto-update functionality
+│   │   └── decoder_wrapper.go # MP3 decoder wrapper
+│   └── web/                    # Web application
+│       ├── web_main.go        # Web server entry point
+│       └── web_server.go      # HTTP server and API handlers
+├── internal/
+│   └── common/                 # Shared code
+│       └── structs.go         # Common data structures
+├── static/                     # Web application files
+│   ├── index.html             # Main HTML page
+│   ├── css/styles.css         # Styles with accessibility features
+│   ├── js/app.js              # JavaScript application
+│   ├── manifest.json          # PWA manifest
+│   └── sw.js                  # Service worker for offline support
+├── build.sh                    # Build script
+└── get_id.py                  # Helper script for token setup
+```
 
 ## PWA Features
 

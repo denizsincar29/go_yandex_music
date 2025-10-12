@@ -9,4 +9,5 @@ static/icon-192.png.svg
 # Built binaries
 ya_music_cli
 ya_music_web
-web_server
+web_servercmd/cli/ya_music_cli
+cmd/web/ya_music_web

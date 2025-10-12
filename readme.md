@@ -40,6 +40,38 @@ python get_id.py
 
 3. Enter your token when prompted
 
+## Building
+
+### Quick Build (Recommended)
+
+Use the build script to build the web server:
+```sh
+./build.sh
+```
+
+This will create the `ya_music_web` executable in the root directory.
+
+### Manual Build
+
+**Important:** You cannot run `go build` from the root directory. Navigate to the specific application directory (`cmd/cli` or `cmd/web`) to build.
+
+**Web Server (No special requirements):**
+```sh
+cd cmd/web
+go build -o ../../ya_music_web
+```
+
+**CLI Application (Requires audio libraries):**
+```sh
+cd cmd/cli
+go build -o ../../ya_music_cli
+```
+
+**Note:** The CLI version requires platform-specific audio libraries:
+- Linux: ALSA development libraries (`libasound2-dev` on Ubuntu/Debian)
+- macOS: CoreAudio (included by default)
+- Windows: Windows Audio API (included by default)
+
 ## Usage
 
 ### Web App (PWA)

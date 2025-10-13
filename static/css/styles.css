@@ -432,3 +432,99 @@ footer {
         transition-duration: 0.01ms !important;
     }
 }
+
+/* Results Headers */
+.results-header {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin: 1.5rem 0 1rem;
+    color: var(--primary-color);
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.results-header:first-child {
+    margin-top: 0;
+}
+
+/* Correction Notice */
+.correction-notice {
+    background-color: var(--surface);
+    border-left: 4px solid var(--secondary-color);
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+    border-radius: 4px;
+    color: var(--on-surface);
+}
+
+.correction-notice strong {
+    color: var(--primary-color);
+}
+
+/* Album and Artist Items */
+.album-item, .artist-item {
+    border-left: 4px solid var(--secondary-color);
+}
+
+.album-item:hover, .artist-item:hover {
+    border-left-color: var(--primary-color);
+}
+
+/* Result Metadata */
+.result-meta {
+    font-size: 0.85rem;
+    color: var(--on-surface);
+    opacity: 0.6;
+    margin-top: 0.25rem;
+}
+
+.result-album-link {
+    font-size: 0.85rem;
+    margin-top: 0.25rem;
+}
+
+.result-album-link a {
+    color: var(--primary-color);
+    text-decoration: none;
+    transition: opacity 0.2s ease;
+}
+
+.result-album-link a:hover {
+    text-decoration: underline;
+    opacity: 0.8;
+}
+
+.result-album-link a:focus {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+    border-radius: 2px;
+}
+
+/* Back Button */
+.back-button {
+    background-color: var(--surface);
+    color: var(--on-surface);
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    margin-bottom: 1rem;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.back-button:hover {
+    background-color: var(--primary-color);
+    color: var(--on-primary);
+    border-color: var(--primary-color);
+}
+
+.back-button:focus {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+

@@ -31,6 +31,12 @@ class YandexMusicApp {
         this.audioPlayer.addEventListener('ended', () => this.handleTrackEnded());
         this.audioPlayer.addEventListener('error', (e) => this.handleAudioError(e));
         
+        // Media key support
+        if ('mediaSession' in navigator) {
+            navigator.mediaSession.setActionHandler('previoustrack', () => this.playPrevious());
+            navigator.mediaSession.setActionHandler('nexttrack', () => this.playNext());
+        }
+        
         // Register service worker for PWA
         this.registerServiceWorker();
         
@@ -67,56 +73,171 @@ class YandexMusicApp {
             
             const data = await response.json();
             this.searchResults = data.tracks || [];
-            this.displaySearchResults();
+            this.albums = data.albums || [];
+            this.artists = data.artists || [];
+            this.displaySearchResults(data);
             
-            if (this.searchResults.length > 0) {
-                this.showStatus(`Found ${this.searchResults.length} tracks`);
+            const totalResults = this.searchResults.length + this.albums.length + this.artists.length;
+            if (totalResults > 0) {
+                this.showStatus(`Found ${totalResults} results`);
             } else {
-                this.showStatus('No tracks found');
+                this.showStatus('No results found');
             }
         } catch (error) {
             console.error('Search error:', error);
-            this.showError('Failed to search tracks. Please try again.');
+            this.showError('Failed to search. Please try again.');
         }
     }
 
-    displaySearchResults() {
+    displaySearchResults(data) {
         this.searchResultsContainer.innerHTML = '';
         
-        if (this.searchResults.length === 0) {
+        const totalResults = this.searchResults.length + (this.albums?.length || 0) + (this.artists?.length || 0);
+        
+        if (totalResults === 0) {
             this.searchResultsContainer.innerHTML = '<div class="empty-state">No results found. Try a different search.</div>';
             return;
         }
 
-        this.searchResults.forEach((track, index) => {
-            const resultItem = document.createElement('div');
-            resultItem.className = 'result-item';
-            resultItem.setAttribute('role', 'button');
-            resultItem.setAttribute('tabindex', '0');
-            resultItem.setAttribute('aria-label', `Play ${track.title} by ${track.artist}`);
-            
-            resultItem.innerHTML = `
-                ${track.coverUrl ? 
-                    `<img src="${track.coverUrl}" alt="${track.title} cover" class="result-cover">` : 
-                    '<div class="result-cover"></div>'
+        // Display spelling correction if applicable
+        if (data.misspellCorrected && data.correctedText) {
+            const correctionNotice = document.createElement('div');
+            correctionNotice.className = 'correction-notice';
+            correctionNotice.innerHTML = `Showing results for: <strong>${this.escapeHtml(data.correctedText)}</strong>`;
+            correctionNotice.setAttribute('role', 'status');
+            this.searchResultsContainer.appendChild(correctionNotice);
+        }
+
+        // Display tracks section
+        if (this.searchResults.length > 0) {
+            const tracksHeader = document.createElement('h2');
+            tracksHeader.textContent = `Tracks (${this.searchResults.length})`;
+            tracksHeader.className = 'results-header';
+            this.searchResultsContainer.appendChild(tracksHeader);
+
+            this.searchResults.forEach((track, index) => {
+                const resultItem = document.createElement('div');
+                resultItem.className = 'result-item';
+                resultItem.setAttribute('role', 'button');
+                resultItem.setAttribute('tabindex', '0');
+                resultItem.setAttribute('aria-label', `Play ${track.title} by ${track.artist}`);
+                
+                resultItem.innerHTML = `
+                    ${track.coverUrl ? 
+                        `<img src="${track.coverUrl}" alt="${track.title} cover" class="result-cover">` : 
+                        '<div class="result-cover"></div>'
+                    }
+                    <div class="result-info">
+                        <div class="result-title">${this.escapeHtml(track.title)}</div>
+                        <div class="result-artist">${this.escapeHtml(track.artist)}</div>
+                        ${track.album ? `<div class="result-album-link">
+                            <a href="#" data-album-id="${track.albumId}" data-album-name="${this.escapeHtml(track.album)}" 
+                               onclick="event.stopPropagation(); return false;">
+                                ${this.escapeHtml(track.album)}
+                            </a>
+                        </div>` : ''}
+                    </div>
+                    <div class="result-duration">${this.formatDuration(track.duration)}</div>
+                `;
+                
+                resultItem.addEventListener('click', () => this.playTrack(index));
+                resultItem.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        this.playTrack(index);
+                    }
+                });
+
+                // Handle album link clicks
+                const albumLink = resultItem.querySelector('.result-album-link a');
+                if (albumLink) {
+                    albumLink.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const albumId = e.target.dataset.albumId;
+                        const albumName = e.target.dataset.albumName;
+                        this.loadAlbumTracks(albumId, albumName);
+                    });
                 }
-                <div class="result-info">
-                    <div class="result-title">${this.escapeHtml(track.title)}</div>
-                    <div class="result-artist">${this.escapeHtml(track.artist)}</div>
-                </div>
-                <div class="result-duration">${this.formatDuration(track.duration)}</div>
-            `;
-            
-            resultItem.addEventListener('click', () => this.playTrack(index));
-            resultItem.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    this.playTrack(index);
-                }
+                
+                this.searchResultsContainer.appendChild(resultItem);
             });
-            
-            this.searchResultsContainer.appendChild(resultItem);
-        });
+        }
+
+        // Display albums section
+        if (this.albums && this.albums.length > 0) {
+            const albumsHeader = document.createElement('h2');
+            albumsHeader.textContent = `Albums (${this.albums.length})`;
+            albumsHeader.className = 'results-header';
+            this.searchResultsContainer.appendChild(albumsHeader);
+
+            this.albums.forEach((album) => {
+                const albumItem = document.createElement('div');
+                albumItem.className = 'result-item album-item';
+                albumItem.setAttribute('role', 'button');
+                albumItem.setAttribute('tabindex', '0');
+                albumItem.setAttribute('aria-label', `View album ${album.title} by ${album.artist}`);
+                
+                albumItem.innerHTML = `
+                    ${album.coverUrl ? 
+                        `<img src="${album.coverUrl}" alt="${album.title} cover" class="result-cover">` : 
+                        '<div class="result-cover"></div>'
+                    }
+                    <div class="result-info">
+                        <div class="result-title">${this.escapeHtml(album.title)}</div>
+                        <div class="result-artist">${this.escapeHtml(album.artist)}</div>
+                        ${album.year ? `<div class="result-meta">${album.year}</div>` : ''}
+                        ${album.trackCount ? `<div class="result-meta">${album.trackCount} tracks</div>` : ''}
+                    </div>
+                `;
+                
+                albumItem.addEventListener('click', () => this.loadAlbumTracks(album.id, album.title));
+                albumItem.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        this.loadAlbumTracks(album.id, album.title);
+                    }
+                });
+                
+                this.searchResultsContainer.appendChild(albumItem);
+            });
+        }
+
+        // Display artists section
+        if (this.artists && this.artists.length > 0) {
+            const artistsHeader = document.createElement('h2');
+            artistsHeader.textContent = `Artists (${this.artists.length})`;
+            artistsHeader.className = 'results-header';
+            this.searchResultsContainer.appendChild(artistsHeader);
+
+            this.artists.forEach((artist) => {
+                const artistItem = document.createElement('div');
+                artistItem.className = 'result-item artist-item';
+                artistItem.setAttribute('role', 'button');
+                artistItem.setAttribute('tabindex', '0');
+                artistItem.setAttribute('aria-label', `View artist ${artist.name}`);
+                
+                artistItem.innerHTML = `
+                    ${artist.coverUrl ? 
+                        `<img src="${artist.coverUrl}" alt="${artist.name}" class="result-cover">` : 
+                        '<div class="result-cover"></div>'
+                    }
+                    <div class="result-info">
+                        <div class="result-title">${this.escapeHtml(artist.name)}</div>
+                    </div>
+                `;
+                
+                artistItem.addEventListener('click', () => this.loadArtistTracks(artist.id, artist.name));
+                artistItem.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        this.loadArtistTracks(artist.id, artist.name);
+                    }
+                });
+                
+                this.searchResultsContainer.appendChild(artistItem);
+            });
+        }
     }
 
     async playTrack(index) {
@@ -243,18 +364,173 @@ class YandexMusicApp {
             
             const data = await response.json();
             
-            // Create a temporary link and trigger download
+            // Trigger actual download using fetch and blob
+            this.showStatus(`Downloading: ${this.currentTrack.title}`);
+            
+            const downloadResponse = await fetch(data.url);
+            const blob = await downloadResponse.blob();
+            
+            // Create a blob URL and trigger download
+            const blobUrl = URL.createObjectURL(blob);
             const link = document.createElement('a');
-            link.href = data.url;
+            link.href = blobUrl;
             link.download = `${this.currentTrack.title} - ${this.currentTrack.artist}.mp3`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
             
-            this.showStatus(`Downloading: ${this.currentTrack.title}`);
+            // Clean up the blob URL
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+            
+            this.showStatus(`Downloaded: ${this.currentTrack.title}`);
         } catch (error) {
             console.error('Download error:', error);
             this.showError('Failed to download track. Please try again.');
+        }
+    }
+
+    async loadAlbumTracks(albumId, albumName) {
+        this.showLoading();
+        this.showStatus(`Loading album: ${albumName}`);
+        
+        try {
+            const response = await fetch(`/api/album-tracks?id=${albumId}&name=${encodeURIComponent(albumName)}`);
+            if (!response.ok) {
+                throw new Error('Failed to load album tracks');
+            }
+            
+            const data = await response.json();
+            this.searchResults = data.tracks || [];
+            
+            this.searchResultsContainer.innerHTML = '';
+            
+            // Add back button
+            const backBtn = document.createElement('button');
+            backBtn.className = 'back-button';
+            backBtn.textContent = '← Back to search results';
+            backBtn.onclick = () => {
+                this.searchForm.dispatchEvent(new Event('submit'));
+            };
+            this.searchResultsContainer.appendChild(backBtn);
+            
+            // Add album header
+            const albumHeader = document.createElement('h2');
+            albumHeader.textContent = `Album: ${albumName}`;
+            albumHeader.className = 'results-header';
+            this.searchResultsContainer.appendChild(albumHeader);
+            
+            if (this.searchResults.length === 0) {
+                this.searchResultsContainer.innerHTML += '<div class="empty-state">No tracks found in this album.</div>';
+                return;
+            }
+            
+            this.searchResults.forEach((track, index) => {
+                const resultItem = document.createElement('div');
+                resultItem.className = 'result-item';
+                resultItem.setAttribute('role', 'button');
+                resultItem.setAttribute('tabindex', '0');
+                resultItem.setAttribute('aria-label', `Play ${track.title} by ${track.artist}`);
+                
+                resultItem.innerHTML = `
+                    ${track.coverUrl ? 
+                        `<img src="${track.coverUrl}" alt="${track.title} cover" class="result-cover">` : 
+                        '<div class="result-cover"></div>'
+                    }
+                    <div class="result-info">
+                        <div class="result-title">${this.escapeHtml(track.title)}</div>
+                        <div class="result-artist">${this.escapeHtml(track.artist)}</div>
+                    </div>
+                    <div class="result-duration">${this.formatDuration(track.duration)}</div>
+                `;
+                
+                resultItem.addEventListener('click', () => this.playTrack(index));
+                resultItem.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        this.playTrack(index);
+                    }
+                });
+                
+                this.searchResultsContainer.appendChild(resultItem);
+            });
+            
+            this.showStatus(`Loaded ${this.searchResults.length} tracks from album: ${albumName}`);
+        } catch (error) {
+            console.error('Album loading error:', error);
+            this.showError('Failed to load album tracks. Please try again.');
+        }
+    }
+
+    async loadArtistTracks(artistId, artistName) {
+        this.showLoading();
+        this.showStatus(`Loading tracks by: ${artistName}`);
+        
+        try {
+            const response = await fetch(`/api/artist-tracks?id=${artistId}&name=${encodeURIComponent(artistName)}`);
+            if (!response.ok) {
+                throw new Error('Failed to load artist tracks');
+            }
+            
+            const data = await response.json();
+            this.searchResults = data.tracks || [];
+            
+            this.searchResultsContainer.innerHTML = '';
+            
+            // Add back button
+            const backBtn = document.createElement('button');
+            backBtn.className = 'back-button';
+            backBtn.textContent = '← Back to search results';
+            backBtn.onclick = () => {
+                this.searchForm.dispatchEvent(new Event('submit'));
+            };
+            this.searchResultsContainer.appendChild(backBtn);
+            
+            // Add artist header
+            const artistHeader = document.createElement('h2');
+            artistHeader.textContent = `Artist: ${artistName}`;
+            artistHeader.className = 'results-header';
+            this.searchResultsContainer.appendChild(artistHeader);
+            
+            if (this.searchResults.length === 0) {
+                this.searchResultsContainer.innerHTML += '<div class="empty-state">No tracks found for this artist.</div>';
+                return;
+            }
+            
+            this.searchResults.forEach((track, index) => {
+                const resultItem = document.createElement('div');
+                resultItem.className = 'result-item';
+                resultItem.setAttribute('role', 'button');
+                resultItem.setAttribute('tabindex', '0');
+                resultItem.setAttribute('aria-label', `Play ${track.title} by ${track.artist}`);
+                
+                resultItem.innerHTML = `
+                    ${track.coverUrl ? 
+                        `<img src="${track.coverUrl}" alt="${track.title} cover" class="result-cover">` : 
+                        '<div class="result-cover"></div>'
+                    }
+                    <div class="result-info">
+                        <div class="result-title">${this.escapeHtml(track.title)}</div>
+                        <div class="result-artist">${this.escapeHtml(track.artist)}</div>
+                        ${track.album ? `<div class="result-meta">${this.escapeHtml(track.album)}</div>` : ''}
+                    </div>
+                    <div class="result-duration">${this.formatDuration(track.duration)}</div>
+                `;
+                
+                resultItem.addEventListener('click', () => this.playTrack(index));
+                resultItem.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        this.playTrack(index);
+                    }
+                });
+                
+                this.searchResultsContainer.appendChild(resultItem);
+            });
+            
+            this.showStatus(`Loaded ${this.searchResults.length} tracks by: ${artistName}`);
+        } catch (error) {
+            console.error('Artist loading error:', error);
+            this.showError('Failed to load artist tracks. Please try again.');
         }
     }
 

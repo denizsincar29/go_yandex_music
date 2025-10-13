@@ -24,16 +24,40 @@ type TrackResponse struct {
 	Title     string   `json:"title"`
 	Artist    string   `json:"artist"`
 	Artists   []string `json:"artists"`
+	ArtistIDs []int    `json:"artistIds,omitempty"`
 	Album     string   `json:"album,omitempty"`
+	AlbumID   int      `json:"albumId,omitempty"`
 	Duration  int      `json:"duration"`
 	CoverURL  string   `json:"coverUrl,omitempty"`
 	Available bool     `json:"available"`
 }
 
+// AlbumResponse represents an album in API responses
+type AlbumResponse struct {
+	ID         int      `json:"id"`
+	Title      string   `json:"title"`
+	Artist     string   `json:"artist"`
+	Artists    []string `json:"artists"`
+	Year       int      `json:"year,omitempty"`
+	CoverURL   string   `json:"coverUrl,omitempty"`
+	TrackCount int      `json:"trackCount,omitempty"`
+}
+
+// ArtistResponse represents an artist in API responses
+type ArtistResponse struct {
+	ID       int    `json:"id"`
+	Name     string `json:"name"`
+	CoverURL string `json:"coverUrl,omitempty"`
+}
+
 // SearchResponse represents search results
 type SearchResponse struct {
-	Tracks []TrackResponse `json:"tracks"`
-	Total  int             `json:"total"`
+	Tracks            []TrackResponse  `json:"tracks"`
+	Albums            []AlbumResponse  `json:"albums,omitempty"`
+	Artists           []ArtistResponse `json:"artists,omitempty"`
+	Total             int              `json:"total"`
+	MisspellCorrected bool             `json:"misspellCorrected,omitempty"`
+	CorrectedText     string           `json:"correctedText,omitempty"`
 }
 
 // DownloadURLResponse represents download URL response
@@ -72,7 +96,8 @@ func (ws *WebServer) handleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s, resp, err := ws.client.Search().Tracks(ws.ctx, query, &yamusic.SearchOptions{Page: 0, NoCorrect: false})
+	// Search for all content types (tracks, albums, artists)
+	s, resp, err := ws.client.Search().All(ws.ctx, query, &yamusic.SearchOptions{Page: 0, NoCorrect: false})
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
@@ -84,9 +109,52 @@ func (ws *WebServer) handleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	results := s.Result.Tracks.Results
-	tracks := make([]TrackResponse, len(results))
-	for i, result := range results {
+	// Process tracks
+	trackResults := s.Result.Tracks.Results
+	tracks := make([]TrackResponse, len(trackResults))
+	for i, result := range trackResults {
+		artists := make([]string, len(result.Artists))
+		artistIDs := make([]int, len(result.Artists))
+		artistStr := ""
+		for j, artist := range result.Artists {
+			artists[j] = artist.Name
+			artistIDs[j] = artist.ID
+			if j == len(result.Artists)-1 {
+				artistStr += artist.Name
+			} else {
+				artistStr += artist.Name + ", "
+			}
+		}
+
+		album := ""
+		albumID := 0
+		coverURL := ""
+		if len(result.Albums) > 0 {
+			album = result.Albums[0].Title
+			albumID = result.Albums[0].ID
+			if result.Albums[0].CoverURI != "" {
+				coverURL = "https://" + result.Albums[0].CoverURI
+			}
+		}
+
+		tracks[i] = TrackResponse{
+			ID:        result.ID,
+			Title:     result.Title,
+			Artist:    artistStr,
+			Artists:   artists,
+			ArtistIDs: artistIDs,
+			Album:     album,
+			AlbumID:   albumID,
+			Duration:  result.DurationMs,
+			CoverURL:  coverURL,
+			Available: result.Available,
+		}
+	}
+
+	// Process albums
+	albumResults := s.Result.Albums.Results
+	albums := make([]AlbumResponse, len(albumResults))
+	for i, result := range albumResults {
 		artists := make([]string, len(result.Artists))
 		artistStr := ""
 		for j, artist := range result.Artists {
@@ -98,30 +166,52 @@ func (ws *WebServer) handleSearch(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		album := ""
 		coverURL := ""
-		if len(result.Albums) > 0 {
-			album = result.Albums[0].Title
-			if result.Albums[0].CoverURI != "" {
-				coverURL = "https://" + result.Albums[0].CoverURI
-			}
+		if result.CoverURI != "" {
+			coverURL = "https://" + result.CoverURI
 		}
 
-		tracks[i] = TrackResponse{
-			ID:        result.ID,
-			Title:     result.Title,
-			Artist:    artistStr,
-			Artists:   artists,
-			Album:     album,
-			Duration:  result.DurationMs,
-			CoverURL:  coverURL,
-			Available: result.Available,
+		albums[i] = AlbumResponse{
+			ID:         result.ID,
+			Title:      result.Title,
+			Artist:     artistStr,
+			Artists:    artists,
+			Year:       result.Year,
+			CoverURL:   coverURL,
+			TrackCount: result.TrackCount,
 		}
 	}
 
+	// Process artists
+	artistResults := s.Result.Artists.Results
+	artists := make([]ArtistResponse, len(artistResults))
+	for i, result := range artistResults {
+		coverURL := ""
+		if result.Cover.URI != "" {
+			coverURL = "https://" + result.Cover.URI
+		}
+
+		artists[i] = ArtistResponse{
+			ID:       result.ID,
+			Name:     result.Name,
+			CoverURL: coverURL,
+		}
+	}
+
+	// Check for spelling correction
+	misspellCorrected := s.Result.MisspellCorrected
+	correctedText := ""
+	if misspellCorrected && s.Result.MisspellResult != "" {
+		correctedText = s.Result.MisspellResult
+	}
+
 	json.NewEncoder(w).Encode(SearchResponse{
-		Tracks: tracks,
-		Total:  len(tracks),
+		Tracks:            tracks,
+		Albums:            albums,
+		Artists:           artists,
+		Total:             len(tracks) + len(albums) + len(artists),
+		MisspellCorrected: misspellCorrected,
+		CorrectedText:     correctedText,
 	})
 }
 
@@ -151,6 +241,167 @@ func (ws *WebServer) handleDownloadURL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(DownloadURLResponse{URL: url})
+}
+
+// handleAlbumTracks handles requests for album tracks by searching for the album name
+func (ws *WebServer) handleAlbumTracks(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	albumIDStr := r.URL.Query().Get("id")
+	albumName := r.URL.Query().Get("name")
+
+	if albumIDStr == "" || albumName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "query parameters 'id' and 'name' are required"})
+		return
+	}
+
+	albumID, err := strconv.Atoi(albumIDStr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "invalid album ID"})
+		return
+	}
+
+	// Search for the album name to get tracks
+	s, resp, err := ws.client.Search().Tracks(ws.ctx, albumName, &yamusic.SearchOptions{Page: 0, NoCorrect: false})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
+		return
+	}
+	if resp.StatusCode != 200 {
+		w.WriteHeader(resp.StatusCode)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: resp.Status})
+		return
+	}
+
+	// Filter tracks by album ID
+	var filteredTracks []TrackResponse
+	for _, result := range s.Result.Tracks.Results {
+		if len(result.Albums) > 0 && result.Albums[0].ID == albumID {
+			artists := make([]string, len(result.Artists))
+			artistIDs := make([]int, len(result.Artists))
+			artistStr := ""
+			for j, artist := range result.Artists {
+				artists[j] = artist.Name
+				artistIDs[j] = artist.ID
+				if j == len(result.Artists)-1 {
+					artistStr += artist.Name
+				} else {
+					artistStr += artist.Name + ", "
+				}
+			}
+
+			coverURL := ""
+			if result.Albums[0].CoverURI != "" {
+				coverURL = "https://" + result.Albums[0].CoverURI
+			}
+
+			filteredTracks = append(filteredTracks, TrackResponse{
+				ID:        result.ID,
+				Title:     result.Title,
+				Artist:    artistStr,
+				Artists:   artists,
+				ArtistIDs: artistIDs,
+				Album:     result.Albums[0].Title,
+				AlbumID:   result.Albums[0].ID,
+				Duration:  result.DurationMs,
+				CoverURL:  coverURL,
+				Available: result.Available,
+			})
+		}
+	}
+
+	json.NewEncoder(w).Encode(SearchResponse{
+		Tracks: filteredTracks,
+		Total:  len(filteredTracks),
+	})
+}
+
+// handleArtistTracks handles requests for artist tracks by searching for the artist name
+func (ws *WebServer) handleArtistTracks(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	artistIDStr := r.URL.Query().Get("id")
+	artistName := r.URL.Query().Get("name")
+
+	if artistIDStr == "" || artistName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "query parameters 'id' and 'name' are required"})
+		return
+	}
+
+	artistID, err := strconv.Atoi(artistIDStr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "invalid artist ID"})
+		return
+	}
+
+	// Search for the artist name to get tracks
+	s, resp, err := ws.client.Search().Tracks(ws.ctx, artistName, &yamusic.SearchOptions{Page: 0, NoCorrect: false})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
+		return
+	}
+	if resp.StatusCode != 200 {
+		w.WriteHeader(resp.StatusCode)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: resp.Status})
+		return
+	}
+
+	// Filter tracks by artist ID
+	var filteredTracks []TrackResponse
+	for _, result := range s.Result.Tracks.Results {
+		for _, artist := range result.Artists {
+			if artist.ID == artistID {
+				artists := make([]string, len(result.Artists))
+				artistIDs := make([]int, len(result.Artists))
+				artistStr := ""
+				for j, a := range result.Artists {
+					artists[j] = a.Name
+					artistIDs[j] = a.ID
+					if j == len(result.Artists)-1 {
+						artistStr += a.Name
+					} else {
+						artistStr += a.Name + ", "
+					}
+				}
+
+				album := ""
+				albumID := 0
+				coverURL := ""
+				if len(result.Albums) > 0 {
+					album = result.Albums[0].Title
+					albumID = result.Albums[0].ID
+					if result.Albums[0].CoverURI != "" {
+						coverURL = "https://" + result.Albums[0].CoverURI
+					}
+				}
+
+				filteredTracks = append(filteredTracks, TrackResponse{
+					ID:        result.ID,
+					Title:     result.Title,
+					Artist:    artistStr,
+					Artists:   artists,
+					ArtistIDs: artistIDs,
+					Album:     album,
+					AlbumID:   albumID,
+					Duration:  result.DurationMs,
+					CoverURL:  coverURL,
+					Available: result.Available,
+				})
+				break // Only add track once even if artist appears multiple times
+			}
+		}
+	}
+
+	json.NewEncoder(w).Encode(SearchResponse{
+		Tracks: filteredTracks,
+		Total:  len(filteredTracks),
+	})
 }
 
 // enableCORS adds CORS headers to allow browser access
@@ -184,6 +435,8 @@ func StartWebServer(port string) error {
 	// API endpoints
 	http.HandleFunc("/api/search", enableCORS(ws.handleSearch))
 	http.HandleFunc("/api/download-url", enableCORS(ws.handleDownloadURL))
+	http.HandleFunc("/api/album-tracks", enableCORS(ws.handleAlbumTracks))
+	http.HandleFunc("/api/artist-tracks", enableCORS(ws.handleArtistTracks))
 
 	addr := ":" + port
 	log.Printf("Starting web server on http://localhost%s\n", addr)

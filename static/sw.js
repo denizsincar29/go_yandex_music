@@ -1,5 +1,5 @@
 // Service Worker for Yandex Music PWA
-const CACHE_NAME = 'yandex-music-pwa-v1';
+const CACHE_NAME = 'yandex-music-pwa-v2';
 const urlsToCache = [
   '/',
   '/index.html',

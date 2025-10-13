@@ -47,6 +47,18 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Handle external images (like cover art) - don't cache opaque responses
+  if (event.request.destination === 'image' && !event.request.url.startsWith(self.location.origin)) {
+    event.respondWith(
+      fetch(event.request, { mode: 'cors', credentials: 'omit' })
+        .catch(() => {
+          // Silently fail for external images that can't be loaded
+          return new Response('', { status: 404, statusText: 'Image not found' });
+        })
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request)
       .then((response) => {
@@ -59,8 +71,13 @@ self.addEventListener('fetch', (event) => {
         const fetchRequest = event.request.clone();
 
         return fetch(fetchRequest).then((response) => {
-          // Check if valid response
-          if (!response || response.status !== 200 || response.type !== 'basic') {
+          // Check if valid response - only cache successful responses from same origin
+          if (!response || response.status !== 200 || (response.type !== 'basic' && response.type !== 'cors')) {
+            return response;
+          }
+
+          // Don't cache opaque responses
+          if (response.type === 'opaque') {
             return response;
           }
 

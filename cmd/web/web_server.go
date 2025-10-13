@@ -34,13 +34,13 @@ type TrackResponse struct {
 
 // AlbumResponse represents an album in API responses
 type AlbumResponse struct {
-	ID       int      `json:"id"`
-	Title    string   `json:"title"`
-	Artist   string   `json:"artist"`
-	Artists  []string `json:"artists"`
-	Year     int      `json:"year,omitempty"`
-	CoverURL string   `json:"coverUrl,omitempty"`
-	TrackCount int    `json:"trackCount,omitempty"`
+	ID         int      `json:"id"`
+	Title      string   `json:"title"`
+	Artist     string   `json:"artist"`
+	Artists    []string `json:"artists"`
+	Year       int      `json:"year,omitempty"`
+	CoverURL   string   `json:"coverUrl,omitempty"`
+	TrackCount int      `json:"trackCount,omitempty"`
 }
 
 // ArtistResponse represents an artist in API responses
@@ -249,7 +249,7 @@ func (ws *WebServer) handleAlbumTracks(w http.ResponseWriter, r *http.Request) {
 
 	albumIDStr := r.URL.Query().Get("id")
 	albumName := r.URL.Query().Get("name")
-	
+
 	if albumIDStr == "" || albumName == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(ErrorResponse{Error: "query parameters 'id' and 'name' are required"})
@@ -325,7 +325,7 @@ func (ws *WebServer) handleArtistTracks(w http.ResponseWriter, r *http.Request) 
 
 	artistIDStr := r.URL.Query().Get("id")
 	artistName := r.URL.Query().Get("name")
-	
+
 	if artistIDStr == "" || artistName == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(ErrorResponse{Error: "query parameters 'id' and 'name' are required"})

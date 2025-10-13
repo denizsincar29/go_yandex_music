@@ -11,3 +11,6 @@ ya_music_cli
 ya_music_web
 web_servercmd/cli/ya_music_cli
 cmd/web/ya_music_web
+# Generated systemd service file
+ya_music_web.service
+logs/

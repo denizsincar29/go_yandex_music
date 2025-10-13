@@ -50,7 +50,7 @@ self.addEventListener('fetch', (event) => {
   // Handle external images (like cover art) - don't cache opaque responses
   if (event.request.destination === 'image' && !event.request.url.startsWith(self.location.origin)) {
     event.respondWith(
-      fetch(event.request, { mode: 'cors', credentials: 'omit' })
+      fetch(event.request, { mode: 'no-cors', credentials: 'omit' })
         .catch(() => {
           // Silently fail for external images that can't be loaded
           return new Response('', { status: 404, statusText: 'Image not found' });

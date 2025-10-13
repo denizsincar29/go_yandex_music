@@ -365,16 +365,14 @@ func TestAlbumTracksIntegration(t *testing.T) {
 	
 	t.Logf("Album tracks endpoint returned %d tracks", len(albumResp.Tracks))
 	
-	// Known issue: The album tracks endpoint may return 0 tracks for some albums
-	// This happens because the endpoint searches for tracks by album name and filters by album ID
-	// The search may not return all tracks from the album
+	// Verify we got tracks
 	if len(albumResp.Tracks) == 0 {
-		t.Logf("KNOWN ISSUE: Album tracks endpoint returned 0 tracks for album '%s' (ID: %d)", 
+		t.Errorf("Expected tracks for album '%s' (ID: %d) but got 0", 
 			firstAlbum.Title, firstAlbum.ID)
-		t.Logf("Expected approximately %d tracks based on trackCount", firstAlbum.TrackCount)
-		t.Logf("This is a known limitation where search doesn't always return tracks matching the album ID")
+		t.Logf("Album reports %d tracks in trackCount", firstAlbum.TrackCount)
 	} else {
-		// Log first few track titles if any were returned
+		t.Logf("Successfully retrieved %d tracks from album", len(albumResp.Tracks))
+		// Log first few track titles
 		for i, track := range albumResp.Tracks {
 			if i >= 3 {
 				break

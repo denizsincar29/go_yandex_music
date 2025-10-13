@@ -54,20 +54,17 @@ These tests require API credentials and verify:
 
 - `web_server_test.go`: All tests for the web server handlers
 
-## Known Issues
+## Implementation Notes
 
-### Album Tracks Bug
+### Album Tracks Endpoint
 
-The `TestAlbumTracksIntegration` test documents a known issue where the album tracks endpoint may return 0 tracks for some albums. This happens because:
+The album tracks endpoint uses the direct API endpoint `/albums/{id}/with-tracks` to reliably fetch all tracks from an album. This approach:
 
-1. The endpoint searches for tracks by album name
-2. It filters results by album ID
-3. The search may not return all tracks from the album
+- Returns all tracks organized in volumes
+- Avoids the limitations of search-based track discovery
+- Provides consistent results for all albums
 
-**Workaround**: The improved implementation now:
-- Searches multiple pages of results
-- Uses a map to deduplicate tracks
-- Logs detailed information for debugging
+Previous implementations that relied on searching by album name could miss tracks due to search API limitations.
 
 ## Adding New Tests
 

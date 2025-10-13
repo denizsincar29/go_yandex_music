@@ -1,5 +1,5 @@
 // Service Worker for Yandex Music PWA
-const CACHE_NAME = 'yandex-music-pwa-v3';
+const CACHE_NAME = 'yandex-music-pwa-v4';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -39,12 +39,13 @@ self.addEventListener('activate', (event) => {
 
 // Fetch event - serve from cache, fallback to network
 self.addEventListener('fetch', (event) => {
-  // Skip API calls, audio streams, and external images - always fetch from network
+  // Skip API calls, audio streams, and external images - always fetch from network without caching
   if (event.request.url.includes('/api/') || 
       event.request.url.includes('.mp3') ||
       event.request.url.includes('download-url') ||
       (event.request.destination === 'image' && !event.request.url.startsWith(self.location.origin))) {
-    return; // Let the browser handle these requests naturally
+    event.respondWith(fetch(event.request));
+    return;
   }
 
   event.respondWith(

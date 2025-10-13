@@ -5,6 +5,9 @@ class YandexMusicApp {
         this.currentTrack = null;
         this.searchResults = [];
         this.currentIndex = -1;
+        this.previousSearchResults = null; // Store previous search state
+        this.albums = [];
+        this.artists = [];
         
         // DOM Elements
         this.searchForm = document.getElementById('search-form');
@@ -75,6 +78,15 @@ class YandexMusicApp {
             this.searchResults = data.tracks || [];
             this.albums = data.albums || [];
             this.artists = data.artists || [];
+            
+            // Store search state for back navigation
+            this.previousSearchResults = {
+                tracks: this.searchResults,
+                albums: this.albums,
+                artists: this.artists,
+                data: data
+            };
+            
             this.displaySearchResults(data);
             
             const totalResults = this.searchResults.length + this.albums.length + this.artists.length;
@@ -124,7 +136,8 @@ class YandexMusicApp {
                 
                 resultItem.innerHTML = `
                     ${track.coverUrl ? 
-                        `<img src="${track.coverUrl}" alt="${track.title} cover" class="result-cover">` : 
+                        `<img src="${track.coverUrl}" alt="${track.title} cover" class="result-cover" crossorigin="anonymous" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                         <div class="result-cover" style="display:none;"></div>` : 
                         '<div class="result-cover"></div>'
                     }
                     <div class="result-info">
@@ -180,7 +193,8 @@ class YandexMusicApp {
                 
                 albumItem.innerHTML = `
                     ${album.coverUrl ? 
-                        `<img src="${album.coverUrl}" alt="${album.title} cover" class="result-cover">` : 
+                        `<img src="${album.coverUrl}" alt="${album.title} cover" class="result-cover" crossorigin="anonymous" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                         <div class="result-cover" style="display:none;"></div>` : 
                         '<div class="result-cover"></div>'
                     }
                     <div class="result-info">
@@ -219,7 +233,8 @@ class YandexMusicApp {
                 
                 artistItem.innerHTML = `
                     ${artist.coverUrl ? 
-                        `<img src="${artist.coverUrl}" alt="${artist.name}" class="result-cover">` : 
+                        `<img src="${artist.coverUrl}" alt="${artist.name}" class="result-cover" crossorigin="anonymous" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                         <div class="result-cover" style="display:none;"></div>` : 
                         '<div class="result-cover"></div>'
                     }
                     <div class="result-info">
@@ -296,7 +311,13 @@ class YandexMusicApp {
         }
 
         const coverHtml = this.currentTrack.coverUrl ?
-            `<img src="${this.currentTrack.coverUrl}" alt="${this.escapeHtml(this.currentTrack.title)} cover" class="cover-image">` :
+            `<img src="${this.currentTrack.coverUrl}" alt="${this.escapeHtml(this.currentTrack.title)} cover" class="cover-image" crossorigin="anonymous" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+             <div class="cover-placeholder" aria-hidden="true" style="display:none;">
+                <svg width="80" height="80" viewBox="0 0 80 80" fill="currentColor">
+                    <path d="M40 0C17.9 0 0 17.9 0 40s17.9 40 40 40 40-17.9 40-40S62.1 0 40 0zm0 72c-17.6 0-32-14.4-32-32S22.4 8 40 8s32 14.4 32 32-14.4 32-32 32z"/>
+                    <circle cx="40" cy="40" r="8"/>
+                </svg>
+            </div>` :
             `<div class="cover-placeholder" aria-hidden="true">
                 <svg width="80" height="80" viewBox="0 0 80 80" fill="currentColor">
                     <path d="M40 0C17.9 0 0 17.9 0 40s17.9 40 40 40 40-17.9 40-40S62.1 0 40 0zm0 72c-17.6 0-32-14.4-32-32S22.4 8 40 8s32 14.4 32 32-14.4 32-32 32z"/>
@@ -409,7 +430,7 @@ class YandexMusicApp {
             backBtn.className = 'back-button';
             backBtn.textContent = '← Back to search results';
             backBtn.onclick = () => {
-                this.searchForm.dispatchEvent(new Event('submit'));
+                this.restorePreviousSearch();
             };
             this.searchResultsContainer.appendChild(backBtn);
             
@@ -433,7 +454,8 @@ class YandexMusicApp {
                 
                 resultItem.innerHTML = `
                     ${track.coverUrl ? 
-                        `<img src="${track.coverUrl}" alt="${track.title} cover" class="result-cover">` : 
+                        `<img src="${track.coverUrl}" alt="${track.title} cover" class="result-cover" crossorigin="anonymous" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                         <div class="result-cover" style="display:none;"></div>` : 
                         '<div class="result-cover"></div>'
                     }
                     <div class="result-info">
@@ -481,7 +503,7 @@ class YandexMusicApp {
             backBtn.className = 'back-button';
             backBtn.textContent = '← Back to search results';
             backBtn.onclick = () => {
-                this.searchForm.dispatchEvent(new Event('submit'));
+                this.restorePreviousSearch();
             };
             this.searchResultsContainer.appendChild(backBtn);
             
@@ -505,7 +527,8 @@ class YandexMusicApp {
                 
                 resultItem.innerHTML = `
                     ${track.coverUrl ? 
-                        `<img src="${track.coverUrl}" alt="${track.title} cover" class="result-cover">` : 
+                        `<img src="${track.coverUrl}" alt="${track.title} cover" class="result-cover" crossorigin="anonymous" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                         <div class="result-cover" style="display:none;"></div>` : 
                         '<div class="result-cover"></div>'
                     }
                     <div class="result-info">
@@ -568,6 +591,22 @@ class YandexMusicApp {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    restorePreviousSearch() {
+        if (!this.previousSearchResults) {
+            this.showError('No previous search results to restore');
+            return;
+        }
+        
+        // Restore search state
+        this.searchResults = this.previousSearchResults.tracks;
+        this.albums = this.previousSearchResults.albums;
+        this.artists = this.previousSearchResults.artists;
+        
+        // Re-display the previous search results
+        this.displaySearchResults(this.previousSearchResults.data);
+        this.showStatus('Returned to previous search results');
     }
 }
 

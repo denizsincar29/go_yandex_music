@@ -136,7 +136,7 @@ class YandexMusicApp {
                 
                 resultItem.innerHTML = `
                     ${track.coverUrl ? 
-                        `<img src="${track.coverUrl}" alt="${track.title} cover" class="result-cover" crossorigin="anonymous" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                        `<img src="${track.coverUrl}" alt="${track.title} cover" class="result-cover" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
                          <div class="result-cover" style="display:none;"></div>` : 
                         '<div class="result-cover"></div>'
                     }
@@ -193,7 +193,7 @@ class YandexMusicApp {
                 
                 albumItem.innerHTML = `
                     ${album.coverUrl ? 
-                        `<img src="${album.coverUrl}" alt="${album.title} cover" class="result-cover" crossorigin="anonymous" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                        `<img src="${album.coverUrl}" alt="${album.title} cover" class="result-cover" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
                          <div class="result-cover" style="display:none;"></div>` : 
                         '<div class="result-cover"></div>'
                     }
@@ -233,7 +233,7 @@ class YandexMusicApp {
                 
                 artistItem.innerHTML = `
                     ${artist.coverUrl ? 
-                        `<img src="${artist.coverUrl}" alt="${artist.name}" class="result-cover" crossorigin="anonymous" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                        `<img src="${artist.coverUrl}" alt="${artist.name}" class="result-cover" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
                          <div class="result-cover" style="display:none;"></div>` : 
                         '<div class="result-cover"></div>'
                     }
@@ -311,7 +311,7 @@ class YandexMusicApp {
         }
 
         const coverHtml = this.currentTrack.coverUrl ?
-            `<img src="${this.currentTrack.coverUrl}" alt="${this.escapeHtml(this.currentTrack.title)} cover" class="cover-image" crossorigin="anonymous" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+            `<img src="${this.currentTrack.coverUrl}" alt="${this.escapeHtml(this.currentTrack.title)} cover" class="cover-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
              <div class="cover-placeholder" aria-hidden="true" style="display:none;">
                 <svg width="80" height="80" viewBox="0 0 80 80" fill="currentColor">
                     <path d="M40 0C17.9 0 0 17.9 0 40s17.9 40 40 40 40-17.9 40-40S62.1 0 40 0zm0 72c-17.6 0-32-14.4-32-32S22.4 8 40 8s32 14.4 32 32-14.4 32-32 32z"/>
@@ -454,7 +454,7 @@ class YandexMusicApp {
                 
                 resultItem.innerHTML = `
                     ${track.coverUrl ? 
-                        `<img src="${track.coverUrl}" alt="${track.title} cover" class="result-cover" crossorigin="anonymous" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                        `<img src="${track.coverUrl}" alt="${track.title} cover" class="result-cover" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
                          <div class="result-cover" style="display:none;"></div>` : 
                         '<div class="result-cover"></div>'
                     }
@@ -527,7 +527,7 @@ class YandexMusicApp {
                 
                 resultItem.innerHTML = `
                     ${track.coverUrl ? 
-                        `<img src="${track.coverUrl}" alt="${track.title} cover" class="result-cover" crossorigin="anonymous" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                        `<img src="${track.coverUrl}" alt="${track.title} cover" class="result-cover" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
                          <div class="result-cover" style="display:none;"></div>` : 
                         '<div class="result-cover"></div>'
                     }

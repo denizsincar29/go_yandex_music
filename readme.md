@@ -6,11 +6,14 @@ A music player for Yandex Music written in Go. Available both as a CLI applicati
 
 - **PWA Web Interface** - Modern, accessible web application
 - **CLI Interface** - Command-line music player for terminal users
-- Search and play tracks from Yandex Music
+- Search for tracks, albums, and artists from Yandex Music
+- Browse album tracks and artist discographies
 - Playback controls (next, previous, pause/resume)
-- Download tracks locally
+- Media key support (hardware next/previous buttons)
+- Download tracks locally (actual file download, not streaming)
+- Spelling correction for search queries
 - High-quality MP3 streaming
-- Screen reader accessibility
+- Screen reader accessibility with semantic headings
 - Offline capability (PWA)
 - Responsive design for mobile and desktop
 
@@ -99,11 +102,14 @@ cd ../..
 2. Open your browser and navigate to `http://localhost:8080`
 
 3. Use the web interface to:
-   - Search for tracks using the search bar
-   - Click on search results to play tracks
+   - Search for tracks, albums, and artists using the search bar
+   - Click on tracks to play them instantly
+   - Navigate to albums by clicking album names in track listings
+   - Browse artist tracks by clicking on artist results
+   - Use hardware media keys (Next/Previous) for navigation
    - Use the native HTML5 audio player controls
    - Navigate between tracks with Previous/Next buttons
-   - Download tracks using the Download button
+   - Download tracks using the Download button (triggers actual file download)
 
 4. Install as PWA:
    - In Chrome/Edge: Click the install icon in the address bar
@@ -113,10 +119,15 @@ cd ../..
 
 The web server exposes the following REST API endpoints:
 
-- `GET /api/search?q=<query>` - Search for tracks
-  - Returns: JSON array of track results with metadata
+- `GET /api/search?q=<query>` - Search for tracks, albums, and artists
+  - Returns: JSON object with tracks, albums, artists arrays and metadata
+  - Includes spelling correction information if applicable
 - `GET /api/download-url?id=<track_id>` - Get download URL for a track
   - Returns: JSON object with streaming URL
+- `GET /api/album-tracks?id=<album_id>&name=<album_name>` - Get tracks from an album
+  - Returns: JSON object with array of tracks
+- `GET /api/artist-tracks?id=<artist_id>&name=<artist_name>` - Get tracks by an artist
+  - Returns: JSON object with array of tracks
 
 All endpoints return JSON and support CORS for browser access.
 

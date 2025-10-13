@@ -251,7 +251,7 @@ func (ws *WebServer) handleDownloadURL(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(DownloadURLResponse{URL: url})
 }
 
-// handleAlbumTracks handles requests for album tracks by searching for the album name
+// handleAlbumTracks handles requests for album tracks using the direct API endpoint
 func (ws *WebServer) handleAlbumTracks(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -271,104 +271,103 @@ func (ws *WebServer) handleAlbumTracks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Search for the album name to get tracks
-	// Try multiple search strategies to find all tracks
+	// Use the direct API endpoint to get album with tracks
+	log.Printf("[Album Tracks] Fetching album '%s' (ID: %d) with tracks", albumName, albumID)
+	
+	// Create a request to the albums/{id}/with-tracks endpoint
+	req, err := ws.client.NewRequest("GET", "albums/"+albumIDStr+"/with-tracks", nil)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	// Define struct to parse the API response
+	var apiResp struct {
+		Result struct {
+			Volumes [][]struct {
+				ID         json.Number `json:"id"`
+				Title      string      `json:"title"`
+				DurationMs int         `json:"durationMs"`
+				Available  bool        `json:"available"`
+				CoverURI   string      `json:"coverUri"`
+				Artists    []struct {
+					ID   int    `json:"id"`
+					Name string `json:"name"`
+				} `json:"artists"`
+				Albums []struct {
+					ID       int    `json:"id"`
+					Title    string `json:"title"`
+					CoverURI string `json:"coverUri"`
+				} `json:"albums"`
+			} `json:"volumes"`
+		} `json:"result"`
+	}
+
+	resp, err := ws.client.Do(ws.ctx, req, &apiResp)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
+		return
+	}
+	if resp.StatusCode != 200 {
+		w.WriteHeader(resp.StatusCode)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: resp.Status})
+		return
+	}
+
+	// Process the tracks from volumes
 	var allTracks []TrackResponse
-	trackMap := make(map[int]TrackResponse) // To avoid duplicates
-	
-	// Strategy 1: Search by album name
-	log.Printf("[Album Tracks] Searching for album '%s' (ID: %d)", albumName, albumID)
-	s1, resp1, err := ws.client.Search().Tracks(ws.ctx, albumName, &yamusic.SearchOptions{Page: 0, NoCorrect: false})
-	if err == nil && resp1.StatusCode == 200 {
-		log.Printf("[Album Tracks] Search strategy 1 returned %d tracks", len(s1.Result.Tracks.Results))
-		for _, result := range s1.Result.Tracks.Results {
-			if len(result.Albums) > 0 && result.Albums[0].ID == albumID {
-				if _, exists := trackMap[result.ID]; !exists {
-					artists := make([]string, len(result.Artists))
-					artistIDs := make([]int, len(result.Artists))
-					artistStr := ""
-					for j, artist := range result.Artists {
-						artists[j] = artist.Name
-						artistIDs[j] = artist.ID
-						if j == len(result.Artists)-1 {
-							artistStr += artist.Name
-						} else {
-							artistStr += artist.Name + ", "
-						}
-					}
+	for _, volume := range apiResp.Result.Volumes {
+		for _, track := range volume {
+			// Convert track ID from json.Number to int
+			trackIDInt, err := track.ID.Int64()
+			if err != nil {
+				log.Printf("[Album Tracks] Failed to parse track ID: %v", err)
+				continue
+			}
 
-					coverURL := ""
-					if result.Albums[0].CoverURI != "" {
-						coverURL = "https://" + result.Albums[0].CoverURI
-					}
-
-					trackMap[result.ID] = TrackResponse{
-						ID:        result.ID,
-						Title:     result.Title,
-						Artist:    artistStr,
-						Artists:   artists,
-						ArtistIDs: artistIDs,
-						Album:     result.Albums[0].Title,
-						AlbumID:   result.Albums[0].ID,
-						Duration:  result.DurationMs,
-						CoverURL:  coverURL,
-						Available: result.Available,
-					}
+			artists := make([]string, len(track.Artists))
+			artistIDs := make([]int, len(track.Artists))
+			artistStr := ""
+			for j, artist := range track.Artists {
+				artists[j] = artist.Name
+				artistIDs[j] = artist.ID
+				if j == len(track.Artists)-1 {
+					artistStr += artist.Name
+				} else {
+					artistStr += artist.Name + ", "
 				}
 			}
-		}
-	}
-	
-	// Strategy 2: Try searching for more pages if we got results
-	if len(trackMap) > 0 && len(s1.Result.Tracks.Results) >= 20 {
-		log.Printf("[Album Tracks] Trying page 1 for more results")
-		s2, resp2, err := ws.client.Search().Tracks(ws.ctx, albumName, &yamusic.SearchOptions{Page: 1, NoCorrect: false})
-		if err == nil && resp2.StatusCode == 200 {
-			log.Printf("[Album Tracks] Search strategy 2 (page 1) returned %d tracks", len(s2.Result.Tracks.Results))
-			for _, result := range s2.Result.Tracks.Results {
-				if len(result.Albums) > 0 && result.Albums[0].ID == albumID {
-					if _, exists := trackMap[result.ID]; !exists {
-						artists := make([]string, len(result.Artists))
-						artistIDs := make([]int, len(result.Artists))
-						artistStr := ""
-						for j, artist := range result.Artists {
-							artists[j] = artist.Name
-							artistIDs[j] = artist.ID
-							if j == len(result.Artists)-1 {
-								artistStr += artist.Name
-							} else {
-								artistStr += artist.Name + ", "
-							}
-						}
 
-						coverURL := ""
-						if result.Albums[0].CoverURI != "" {
-							coverURL = "https://" + result.Albums[0].CoverURI
-						}
+			coverURL := ""
+			if track.CoverURI != "" {
+				coverURL = "https://" + track.CoverURI
+			}
 
-						trackMap[result.ID] = TrackResponse{
-							ID:        result.ID,
-							Title:     result.Title,
-							Artist:    artistStr,
-							Artists:   artists,
-							ArtistIDs: artistIDs,
-							Album:     result.Albums[0].Title,
-							AlbumID:   result.Albums[0].ID,
-							Duration:  result.DurationMs,
-							CoverURL:  coverURL,
-							Available: result.Available,
-						}
-					}
+			albumTitle := albumName
+			if len(track.Albums) > 0 {
+				albumTitle = track.Albums[0].Title
+				if track.Albums[0].CoverURI != "" {
+					coverURL = "https://" + track.Albums[0].CoverURI
 				}
 			}
+
+			allTracks = append(allTracks, TrackResponse{
+				ID:        int(trackIDInt),
+				Title:     track.Title,
+				Artist:    artistStr,
+				Artists:   artists,
+				ArtistIDs: artistIDs,
+				Album:     albumTitle,
+				AlbumID:   albumID,
+				Duration:  track.DurationMs,
+				CoverURL:  coverURL,
+				Available: track.Available,
+			})
 		}
 	}
-	
-	// Convert map to slice
-	for _, track := range trackMap {
-		allTracks = append(allTracks, track)
-	}
-	
+
 	log.Printf("[Album Tracks] Returning %d tracks for album '%s'", len(allTracks), albumName)
 
 	json.NewEncoder(w).Encode(SearchResponse{

@@ -1,5 +1,5 @@
 // Service Worker for Yandex Music PWA
-const CACHE_NAME = 'yandex-music-pwa-v4';
+const CACHE_NAME = 'yandex-music-pwa-v5';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -39,11 +39,31 @@ self.addEventListener('activate', (event) => {
 
 // Fetch event - serve from cache, fallback to network
 self.addEventListener('fetch', (event) => {
-  // Skip API calls, audio streams, and external images - always fetch from network without caching
-  if (event.request.url.includes('/api/') || 
-      event.request.url.includes('.mp3') ||
-      event.request.url.includes('download-url') ||
-      (event.request.destination === 'image' && !event.request.url.startsWith(self.location.origin))) {
+  const url = event.request.url;
+  const isExternal = !url.startsWith(self.location.origin);
+  const isImage = event.request.destination === 'image';
+  
+  // Log all requests for debugging
+  console.log('[SW Fetch]', {
+    url: url,
+    destination: event.request.destination,
+    mode: event.request.mode,
+    isExternal: isExternal,
+    isImage: isImage
+  });
+  
+  // For external images, don't intercept at all - let browser handle naturally
+  if (isImage && isExternal) {
+    console.log('[SW] Bypassing external image:', url);
+    // Don't call event.respondWith() - let the browser handle it completely
+    return;
+  }
+  
+  // Skip API calls and audio streams - always fetch from network without caching
+  if (url.includes('/api/') || 
+      url.includes('.mp3') ||
+      url.includes('download-url')) {
+    console.log('[SW] Fetching from network (no cache):', url);
     event.respondWith(fetch(event.request));
     return;
   }
@@ -53,20 +73,30 @@ self.addEventListener('fetch', (event) => {
       .then((response) => {
         // Cache hit - return response
         if (response) {
+          console.log('[SW] Cache hit:', url);
           return response;
         }
 
+        console.log('[SW] Cache miss, fetching:', url);
         // Clone the request
         const fetchRequest = event.request.clone();
 
         return fetch(fetchRequest).then((response) => {
+          console.log('[SW] Fetch response:', {
+            url: url,
+            status: response.status,
+            type: response.type
+          });
+          
           // Check if valid response - only cache successful responses from same origin
           if (!response || response.status !== 200 || (response.type !== 'basic' && response.type !== 'cors')) {
+            console.log('[SW] Not caching (invalid or non-2xx):', url);
             return response;
           }
 
           // Don't cache opaque responses
           if (response.type === 'opaque') {
+            console.log('[SW] Not caching opaque response:', url);
             return response;
           }
 
@@ -75,6 +105,7 @@ self.addEventListener('fetch', (event) => {
 
           caches.open(CACHE_NAME)
             .then((cache) => {
+              console.log('[SW] Caching:', url);
               cache.put(event.request, responseToCache);
             });
 

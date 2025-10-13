@@ -72,10 +72,18 @@ type ErrorResponse struct {
 
 // NewWebServer creates a new web server instance
 func NewWebServer(ctx context.Context) (*WebServer, error) {
+	// Try to load .env file from multiple locations
+	// First try current directory (for production binary)
 	err := godotenv.Load()
 	if err != nil {
-		return nil, err
+		// If not found, try parent directories (for tests running in cmd/web/)
+		err = godotenv.Load("../../.env")
+		if err != nil {
+			// If still not found, continue anyway - env vars might be set externally
+			log.Printf("Warning: Could not load .env file: %v", err)
+		}
 	}
+	
 	token := os.Getenv("YA_MUSIC_TOKEN")
 	uid, err := strconv.Atoi(os.Getenv("YA_MUSIC_ID"))
 	if err != nil {

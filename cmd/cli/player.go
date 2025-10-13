@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 
+	"go_yandex_music/internal/common"
 	"pkg.botr.me/yamusic"
 )
 
@@ -14,7 +15,7 @@ import (
 type MusicPlayer struct {
 	player  *StreamPlayer
 	client  *yamusic.Client
-	Results []YandexMusicTrack
+	Results []common.YandexMusicTrack
 	ctx     context.Context
 	idx     int
 }
@@ -26,22 +27,22 @@ func NewPlayer(ctx context.Context, uid int, token string) (*MusicPlayer, error)
 		return nil, err
 	}
 	client := yamusic.NewClient(yamusic.AccessToken(uid, token))
-	return &MusicPlayer{player: player, client: client, ctx: ctx, Results: []YandexMusicTrack{}, idx: 0}, nil
+	return &MusicPlayer{player: player, client: client, ctx: ctx, Results: []common.YandexMusicTrack{}, idx: 0}, nil
 }
 
 // SearchTracks searches for tracks using the Yandex Music API
-func (m *MusicPlayer) SearchTracks(query string) ([]YandexMusicTrack, error) {
+func (m *MusicPlayer) SearchTracks(query string) ([]common.YandexMusicTrack, error) {
 	s, resp, err := m.client.Search().Tracks(m.ctx, query, &yamusic.SearchOptions{Page: 0, NoCorrect: false})
 	if err != nil {
-		return []YandexMusicTrack{}, err
+		return []common.YandexMusicTrack{}, err
 	}
 	if resp.StatusCode != 200 {
-		return []YandexMusicTrack{}, fmt.Errorf("error: %s", resp.Status)
+		return []common.YandexMusicTrack{}, fmt.Errorf("error: %s", resp.Status)
 	}
 	results := s.Result.Tracks.Results
-	r := make([]YandexMusicTrack, len(results))
+	r := make([]common.YandexMusicTrack, len(results))
 	for i, result := range results {
-		r[i] = YandexMusicTrack(result)
+		r[i] = common.YandexMusicTrack(result)
 	}
 	m.Results = r
 	m.idx = 0

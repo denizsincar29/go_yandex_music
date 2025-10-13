@@ -1,4 +1,4 @@
-package main
+package common
 
 import "pkg.botr.me/yamusic"
 

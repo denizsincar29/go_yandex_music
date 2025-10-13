@@ -7,7 +7,9 @@ echo "Building Yandex Music Player..."
 
 # Build Web Server
 echo "Building Web Server..."
-go build -o ya_music_web web_server.go web_main.go
+cd cmd/web
+go build -o ../../ya_music_web
+cd ../..
 
 echo ""
 echo "Build complete!"
@@ -16,5 +18,6 @@ echo "To run Web Server: ./ya_music_web"
 echo "Then open http://localhost:8080 in your browser"
 echo ""
 echo "Note: CLI version requires audio libraries (ALSA on Linux)"
-echo "To build CLI: go build -o ya_music_cli main.go player.go play.go structs.go help.go update.go decoder_wrapper.go"
+echo "To build CLI (requires ALSA/audio libs):"
+echo "  cd cmd/cli && go build -o ../../ya_music_cli"
 echo ""

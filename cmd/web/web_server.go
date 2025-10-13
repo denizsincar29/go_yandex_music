@@ -72,10 +72,18 @@ type ErrorResponse struct {
 
 // NewWebServer creates a new web server instance
 func NewWebServer(ctx context.Context) (*WebServer, error) {
+	// Try to load .env file from multiple locations
+	// First try current directory (for production binary)
 	err := godotenv.Load()
 	if err != nil {
-		return nil, err
+		// If not found, try parent directories (for tests running in cmd/web/)
+		err = godotenv.Load("../../.env")
+		if err != nil {
+			// If still not found, continue anyway - env vars might be set externally
+			log.Printf("Warning: Could not load .env file: %v", err)
+		}
 	}
+	
 	token := os.Getenv("YA_MUSIC_TOKEN")
 	uid, err := strconv.Atoi(os.Getenv("YA_MUSIC_ID"))
 	if err != nil {
@@ -264,60 +272,111 @@ func (ws *WebServer) handleAlbumTracks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Search for the album name to get tracks
-	s, resp, err := ws.client.Search().Tracks(ws.ctx, albumName, &yamusic.SearchOptions{Page: 0, NoCorrect: false})
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
-		return
-	}
-	if resp.StatusCode != 200 {
-		w.WriteHeader(resp.StatusCode)
-		json.NewEncoder(w).Encode(ErrorResponse{Error: resp.Status})
-		return
-	}
+	// Try multiple search strategies to find all tracks
+	var allTracks []TrackResponse
+	trackMap := make(map[int]TrackResponse) // To avoid duplicates
+	
+	// Strategy 1: Search by album name
+	log.Printf("[Album Tracks] Searching for album '%s' (ID: %d)", albumName, albumID)
+	s1, resp1, err := ws.client.Search().Tracks(ws.ctx, albumName, &yamusic.SearchOptions{Page: 0, NoCorrect: false})
+	if err == nil && resp1.StatusCode == 200 {
+		log.Printf("[Album Tracks] Search strategy 1 returned %d tracks", len(s1.Result.Tracks.Results))
+		for _, result := range s1.Result.Tracks.Results {
+			if len(result.Albums) > 0 && result.Albums[0].ID == albumID {
+				if _, exists := trackMap[result.ID]; !exists {
+					artists := make([]string, len(result.Artists))
+					artistIDs := make([]int, len(result.Artists))
+					artistStr := ""
+					for j, artist := range result.Artists {
+						artists[j] = artist.Name
+						artistIDs[j] = artist.ID
+						if j == len(result.Artists)-1 {
+							artistStr += artist.Name
+						} else {
+							artistStr += artist.Name + ", "
+						}
+					}
 
-	// Filter tracks by album ID
-	var filteredTracks []TrackResponse
-	for _, result := range s.Result.Tracks.Results {
-		if len(result.Albums) > 0 && result.Albums[0].ID == albumID {
-			artists := make([]string, len(result.Artists))
-			artistIDs := make([]int, len(result.Artists))
-			artistStr := ""
-			for j, artist := range result.Artists {
-				artists[j] = artist.Name
-				artistIDs[j] = artist.ID
-				if j == len(result.Artists)-1 {
-					artistStr += artist.Name
-				} else {
-					artistStr += artist.Name + ", "
+					coverURL := ""
+					if result.Albums[0].CoverURI != "" {
+						coverURL = "https://" + result.Albums[0].CoverURI
+					}
+
+					trackMap[result.ID] = TrackResponse{
+						ID:        result.ID,
+						Title:     result.Title,
+						Artist:    artistStr,
+						Artists:   artists,
+						ArtistIDs: artistIDs,
+						Album:     result.Albums[0].Title,
+						AlbumID:   result.Albums[0].ID,
+						Duration:  result.DurationMs,
+						CoverURL:  coverURL,
+						Available: result.Available,
+					}
 				}
 			}
-
-			coverURL := ""
-			if result.Albums[0].CoverURI != "" {
-				coverURL = "https://" + result.Albums[0].CoverURI
-			}
-
-			filteredTracks = append(filteredTracks, TrackResponse{
-				ID:        result.ID,
-				Title:     result.Title,
-				Artist:    artistStr,
-				Artists:   artists,
-				ArtistIDs: artistIDs,
-				Album:     result.Albums[0].Title,
-				AlbumID:   result.Albums[0].ID,
-				Duration:  result.DurationMs,
-				CoverURL:  coverURL,
-				Available: result.Available,
-			})
 		}
 	}
+	
+	// Strategy 2: Try searching for more pages if we got results
+	if len(trackMap) > 0 && len(s1.Result.Tracks.Results) >= 20 {
+		log.Printf("[Album Tracks] Trying page 1 for more results")
+		s2, resp2, err := ws.client.Search().Tracks(ws.ctx, albumName, &yamusic.SearchOptions{Page: 1, NoCorrect: false})
+		if err == nil && resp2.StatusCode == 200 {
+			log.Printf("[Album Tracks] Search strategy 2 (page 1) returned %d tracks", len(s2.Result.Tracks.Results))
+			for _, result := range s2.Result.Tracks.Results {
+				if len(result.Albums) > 0 && result.Albums[0].ID == albumID {
+					if _, exists := trackMap[result.ID]; !exists {
+						artists := make([]string, len(result.Artists))
+						artistIDs := make([]int, len(result.Artists))
+						artistStr := ""
+						for j, artist := range result.Artists {
+							artists[j] = artist.Name
+							artistIDs[j] = artist.ID
+							if j == len(result.Artists)-1 {
+								artistStr += artist.Name
+							} else {
+								artistStr += artist.Name + ", "
+							}
+						}
+
+						coverURL := ""
+						if result.Albums[0].CoverURI != "" {
+							coverURL = "https://" + result.Albums[0].CoverURI
+						}
+
+						trackMap[result.ID] = TrackResponse{
+							ID:        result.ID,
+							Title:     result.Title,
+							Artist:    artistStr,
+							Artists:   artists,
+							ArtistIDs: artistIDs,
+							Album:     result.Albums[0].Title,
+							AlbumID:   result.Albums[0].ID,
+							Duration:  result.DurationMs,
+							CoverURL:  coverURL,
+							Available: result.Available,
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	// Convert map to slice
+	for _, track := range trackMap {
+		allTracks = append(allTracks, track)
+	}
+	
+	log.Printf("[Album Tracks] Returning %d tracks for album '%s'", len(allTracks), albumName)
 
 	json.NewEncoder(w).Encode(SearchResponse{
-		Tracks: filteredTracks,
-		Total:  len(filteredTracks),
+		Tracks: allTracks,
+		Total:  len(allTracks),
 	})
 }
+
 
 // handleArtistTracks handles requests for artist tracks by searching for the artist name
 func (ws *WebServer) handleArtistTracks(w http.ResponseWriter, r *http.Request) {

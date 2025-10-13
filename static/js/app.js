@@ -185,6 +185,12 @@ class YandexMusicApp {
             this.searchResultsContainer.appendChild(albumsHeader);
 
             this.albums.forEach((album) => {
+                console.log('[App] Creating album item:', {
+                    title: album.title,
+                    coverUrl: album.coverUrl,
+                    hasCover: !!album.coverUrl
+                });
+                
                 const albumItem = document.createElement('div');
                 albumItem.className = 'result-item album-item';
                 albumItem.setAttribute('role', 'button');
@@ -193,7 +199,7 @@ class YandexMusicApp {
                 
                 albumItem.innerHTML = `
                     ${album.coverUrl ? 
-                        `<img src="${album.coverUrl}" alt="${album.title} cover" class="result-cover" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                        `<img src="${album.coverUrl}" alt="${album.title} cover" class="result-cover" onerror="this.style.display='none'; this.nextElementSibling.style.display='block'; console.error('[App] Image load error:', '${album.coverUrl}');">
                          <div class="result-cover" style="display:none;"></div>` : 
                         '<div class="result-cover"></div>'
                     }
@@ -414,13 +420,23 @@ class YandexMusicApp {
         this.showLoading();
         this.showStatus(`Loading album: ${albumName}`);
         
+        console.log('[App] Loading album tracks:', { albumId, albumName });
+        
         try {
             const response = await fetch(`/api/album-tracks?id=${albumId}&name=${encodeURIComponent(albumName)}`);
+            console.log('[App] Album tracks response:', {
+                status: response.status,
+                ok: response.ok,
+                type: response.type
+            });
+            
             if (!response.ok) {
                 throw new Error('Failed to load album tracks');
             }
             
             const data = await response.json();
+            console.log('[App] Album tracks data:', data);
+            
             this.searchResults = data.tracks || [];
             
             this.searchResultsContainer.innerHTML = '';
@@ -452,9 +468,15 @@ class YandexMusicApp {
                 resultItem.setAttribute('tabindex', '0');
                 resultItem.setAttribute('aria-label', `Play ${track.title} by ${track.artist}`);
                 
+                console.log('[App] Creating track item:', {
+                    title: track.title,
+                    coverUrl: track.coverUrl,
+                    hasCover: !!track.coverUrl
+                });
+                
                 resultItem.innerHTML = `
                     ${track.coverUrl ? 
-                        `<img src="${track.coverUrl}" alt="${track.title} cover" class="result-cover" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                        `<img src="${track.coverUrl}" alt="${track.title} cover" class="result-cover" onerror="this.style.display='none'; this.nextElementSibling.style.display='block'; console.error('[App] Image load error:', '${track.coverUrl}');">
                          <div class="result-cover" style="display:none;"></div>` : 
                         '<div class="result-cover"></div>'
                     }

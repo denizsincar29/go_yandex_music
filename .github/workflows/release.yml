@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
     outputs:
-      tag: ${{ steps.create_tag.outputs.tag }}
+      tag: ${{ steps.check_tag.outputs.tag }}
       changelog: ${{ steps.generate_changelog.outputs.changelog }}
     steps:
       - name: Checkout
@@ -44,12 +44,15 @@ jobs:
       - name: Check if tag exists
         id: check_tag
         run: |
-          if git rev-parse "${{ steps.read_version.outputs.tag }}" >/dev/null 2>&1; then
+          TAG="${{ steps.read_version.outputs.tag }}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
             echo "exists=true" >> $GITHUB_OUTPUT
-            echo "Tag ${{ steps.read_version.outputs.tag }} already exists"
+            echo "tag=$TAG" >> $GITHUB_OUTPUT
+            echo "Tag $TAG already exists"
           else
             echo "exists=false" >> $GITHUB_OUTPUT
-            echo "Tag ${{ steps.read_version.outputs.tag }} does not exist"
+            echo "tag=$TAG" >> $GITHUB_OUTPUT
+            echo "Tag $TAG does not exist"
           fi
       
       - name: Read changelog from version.txt
@@ -83,7 +86,6 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag -a "$TAG" -m "Release $TAG"
           git push origin "$TAG"
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "Created and pushed tag: $TAG"
   
   goreleaser:

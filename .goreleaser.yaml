@@ -11,23 +11,51 @@ before:
     - go generate ./...
 
 builds:
-  - env:
+  - id: web
+    main: ./cmd/web
+    binary: go_yandex_music_web
+    env:
       - CGO_ENABLED=0
     goos:
       - windows
       - darwin
+      - linux
+  
+  - id: cli
+    main: ./cmd/cli
+    binary: go_yandex_music_cli
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - linux
+    goarch:
+      - amd64
 
 archives:
-  - formats: [tar.gz]
-    # this name template makes the OS and Arch compatible with the results of `uname`.
+  - id: web-archive
+    builds: [web]
+    formats: [tar.gz]
     name_template: >-
-      {{ .ProjectName }}_
+      {{ .ProjectName }}_web_
       {{- title .Os }}_
       {{- if eq .Arch "amd64" }}x86_64
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
-    # use zip for windows archives
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+  
+  - id: cli-archive
+    builds: [cli]
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_cli_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
     format_overrides:
       - goos: windows
         formats: [zip]

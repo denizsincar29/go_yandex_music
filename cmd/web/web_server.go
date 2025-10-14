@@ -85,13 +85,13 @@ func NewWebServer(ctx context.Context) (*WebServer, error) {
 			log.Printf("Warning: Could not load .env file: %v", err)
 		}
 	}
-	
+
 	token := os.Getenv("YA_MUSIC_TOKEN")
 	uid, err := strconv.Atoi(os.Getenv("YA_MUSIC_ID"))
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Get base path from environment variable (e.g., "/music" for reverse proxy)
 	basePath := os.Getenv("BASE_PATH")
 	if basePath != "" {
@@ -103,7 +103,7 @@ func NewWebServer(ctx context.Context) (*WebServer, error) {
 			basePath = basePath[:len(basePath)-1]
 		}
 	}
-	
+
 	client := yamusic.NewClient(yamusic.AccessToken(uid, token))
 	return &WebServer{client: client, ctx: ctx, basePath: basePath}, nil
 }
@@ -288,7 +288,7 @@ func (ws *WebServer) handleAlbumTracks(w http.ResponseWriter, r *http.Request) {
 
 	// Use the direct API endpoint to get album with tracks
 	log.Printf("[Album Tracks] Fetching album '%s' (ID: %d) with tracks", albumName, albumID)
-	
+
 	// Create a request to the albums/{id}/with-tracks endpoint
 	req, err := ws.client.NewRequest("GET", "albums/"+albumIDStr+"/with-tracks", nil)
 	if err != nil {
@@ -390,7 +390,6 @@ func (ws *WebServer) handleAlbumTracks(w http.ResponseWriter, r *http.Request) {
 		Total:  len(allTracks),
 	})
 }
-
 
 // handleArtistTracks handles requests for artist tracks by searching for the artist name
 func (ws *WebServer) handleArtistTracks(w http.ResponseWriter, r *http.Request) {
@@ -503,7 +502,7 @@ func (ws *WebServer) handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	content := string(indexContent)
-	
+
 	// Inject base path using a <base> tag and window.BASE_PATH variable
 	basePath := ws.basePath
 	if basePath == "" {
@@ -511,13 +510,13 @@ func (ws *WebServer) handleIndex(w http.ResponseWriter, r *http.Request) {
 	} else if basePath[len(basePath)-1] != '/' {
 		basePath = basePath + "/"
 	}
-	
+
 	baseTag := "<base href=\"" + basePath + "\">\n    "
 	basePathScript := "<script>window.BASE_PATH = '" + ws.basePath + "';</script>\n    "
-	
+
 	// Insert after <head> tag
 	content = strings.Replace(content, "<head>\n", "<head>\n    "+baseTag+basePathScript, 1)
-	
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(content))
 }
@@ -538,8 +537,8 @@ func StartWebServer(port string) error {
 	if ws.basePath != "" {
 		// Handle both base path and base path with trailing slash
 		basePathHandler := func(w http.ResponseWriter, r *http.Request) {
-			// If exactly the base path (no trailing slash), serve index
-			if r.URL.Path == ws.basePath {
+			// If exactly the base path (no trailing slash) or base path with trailing slash, serve index
+			if r.URL.Path == ws.basePath || r.URL.Path == ws.basePath+"/" {
 				ws.handleIndex(w, r)
 			} else {
 				// Strip base path and serve static files
@@ -549,7 +548,7 @@ func StartWebServer(port string) error {
 		mux.HandleFunc(ws.basePath+"/", basePathHandler)
 		// Also handle exact base path without trailing slash
 		mux.HandleFunc(ws.basePath, ws.handleIndex)
-		
+
 		// API endpoints with base path
 		mux.HandleFunc(ws.basePath+"/api/search", enableCORS(ws.handleSearch))
 		mux.HandleFunc(ws.basePath+"/api/download-url", enableCORS(ws.handleDownloadURL))

@@ -52,91 +52,27 @@ jobs:
             echo "Tag ${{ steps.read_version.outputs.tag }} does not exist"
           fi
       
-      - name: Get latest tag
-        id: get_latest_tag
-        if: steps.check_tag.outputs.exists == 'false'
-        run: |
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          if [ -z "$LATEST_TAG" ]; then
-            echo "No previous tags found"
-            echo "latest_tag=" >> $GITHUB_OUTPUT
-          else
-            echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
-            echo "Latest tag: $LATEST_TAG"
-          fi
-      
-      - name: Generate changelog with Copilot
+      - name: Read changelog from version.txt
         id: generate_changelog
         if: steps.check_tag.outputs.exists == 'false'
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const fs = require('fs');
-            const version = '${{ steps.read_version.outputs.version }}';
-            const latestTag = '${{ steps.get_latest_tag.outputs.latest_tag }}';
-            
-            // Get commits since last tag
-            let commits = [];
-            try {
-              const compareResult = latestTag 
-                ? await github.rest.repos.compareCommits({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    base: latestTag,
-                    head: context.sha
-                  })
-                : { data: { commits: [] } };
-              
-              commits = compareResult.data.commits || [];
-            } catch (error) {
-              console.log('Error getting commits:', error.message);
-              // Get recent commits if compare fails
-              const commitsResult = await github.rest.repos.listCommits({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                per_page: 20
-              });
-              commits = commitsResult.data;
-            }
-            
-            // Format commits for changelog
-            let changelogLines = [];
-            commits.forEach(commit => {
-              const message = commit.commit.message.split('\n')[0];
-              if (!message.match(/^(merge|Merge)/i)) {
-                changelogLines.push(`- ${message} (${commit.sha.substring(0, 7)})`);
-              }
-            });
-            
-            // Read changelog from version.txt if it exists
-            let versionFileContent = fs.readFileSync('version.txt', 'utf8').trim();
-            let lines = versionFileContent.split('\n');
-            let changelogFromFile = '';
-            if (lines.length > 1) {
-              // Changelog is on lines after the version
-              changelogFromFile = lines.slice(1).join('\n').trim();
-            }
-            
-            // Generate changelog
-            let changelog = `## What's Changed\n\n`;
-            
-            if (changelogFromFile) {
-              changelog += changelogFromFile + '\n\n';
-            }
-            
-            if (changelogLines.length > 0) {
-              changelog += '### Commits\n\n' + changelogLines.join('\n');
-            } else {
-              changelog += 'No significant changes in this release.';
-            }
-            
-            console.log('Generated changelog:\n', changelog);
-            
-            // Write to output
-            const changelogEncoded = Buffer.from(changelog).toString('base64');
-            fs.writeFileSync(process.env.GITHUB_OUTPUT, `changelog<<EOF\n${changelog}\nEOF\n`, { flag: 'a' });
-            
-            return changelog;
+        run: |
+          # Read changelog from version.txt (all lines after the first line)
+          CHANGELOG=$(tail -n +2 version.txt)
+          
+          if [ -z "$CHANGELOG" ]; then
+            echo "No changelog found in version.txt"
+            CHANGELOG="Release ${{ steps.read_version.outputs.version }}"
+          fi
+          
+          echo "Changelog from version.txt:"
+          echo "$CHANGELOG"
+          
+          # Write to output
+          {
+            echo "changelog<<EOF"
+            echo "$CHANGELOG"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
       
       - name: Create and push tag
         id: create_tag
@@ -178,21 +114,15 @@ jobs:
       - name: Prepare release notes
         id: release_notes
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            # Use generated changelog from auto-tag job
-            echo "Using generated changelog"
-            CHANGELOG="${{ needs.auto-tag.outputs.changelog }}"
-          else
-            # Use GoReleaser's automatic changelog
-            echo "Using GoReleaser automatic changelog"
-            CHANGELOG=""
-          fi
+          # Use changelog from version.txt (passed from auto-tag job)
+          CHANGELOG="${{ needs.auto-tag.outputs.changelog }}"
           
-          # Save to file for GoReleaser
           if [ -n "$CHANGELOG" ]; then
+            echo "Using changelog from version.txt"
             echo "$CHANGELOG" > /tmp/release_notes.md
             echo "notes_file=/tmp/release_notes.md" >> $GITHUB_OUTPUT
           else
+            echo "No changelog available, using GoReleaser automatic changelog"
             echo "notes_file=" >> $GITHUB_OUTPUT
           fi
       

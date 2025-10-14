@@ -1,4 +1,4 @@
-2.0.3
+2.0.4
 Major release with comprehensive PWA features, enhanced search, and complete testing infrastructure
 
 ## Version 2.0 - Comprehensive Feature Update

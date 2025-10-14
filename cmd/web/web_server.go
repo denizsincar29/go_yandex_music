@@ -536,10 +536,20 @@ func StartWebServer(port string) error {
 	// Serve static files with base path
 	fs := http.FileServer(http.Dir("./static"))
 	if ws.basePath != "" {
-		// Strip base path before serving static files
-		mux.Handle(ws.basePath+"/", http.StripPrefix(ws.basePath, fs))
-		// Handle index specifically to inject base path
+		// Handle both base path and base path with trailing slash
+		basePathHandler := func(w http.ResponseWriter, r *http.Request) {
+			// If exactly the base path (no trailing slash), serve index
+			if r.URL.Path == ws.basePath {
+				ws.handleIndex(w, r)
+			} else {
+				// Strip base path and serve static files
+				http.StripPrefix(ws.basePath, fs).ServeHTTP(w, r)
+			}
+		}
+		mux.HandleFunc(ws.basePath+"/", basePathHandler)
+		// Also handle exact base path without trailing slash
 		mux.HandleFunc(ws.basePath, ws.handleIndex)
+		
 		// API endpoints with base path
 		mux.HandleFunc(ws.basePath+"/api/search", enableCORS(ws.handleSearch))
 		mux.HandleFunc(ws.basePath+"/api/download-url", enableCORS(ws.handleDownloadURL))
@@ -548,18 +558,15 @@ func StartWebServer(port string) error {
 		log.Printf("Starting web server on http://localhost:%s%s\n", port, ws.basePath)
 	} else {
 		// No base path - serve at root
-		mux.Handle("/", fs)
-		// Handle index specifically to inject base path
-		mux.HandleFunc("/index.html", ws.handleIndex)
-		// Also handle root path
-		indexHandler := func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == "/" {
+		// Handle root path specifically to inject base path
+		rootHandler := func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/" || r.URL.Path == "/index.html" {
 				ws.handleIndex(w, r)
 			} else {
 				fs.ServeHTTP(w, r)
 			}
 		}
-		mux.HandleFunc("/", indexHandler)
+		mux.HandleFunc("/", rootHandler)
 		// API endpoints at root
 		mux.HandleFunc("/api/search", enableCORS(ws.handleSearch))
 		mux.HandleFunc("/api/download-url", enableCORS(ws.handleDownloadURL))

@@ -52,7 +52,7 @@ class YandexMusicApp {
     async registerServiceWorker() {
         if ('serviceWorker' in navigator) {
             try {
-                const registration = await navigator.serviceWorker.register('/sw.js');
+                const registration = await navigator.serviceWorker.register('sw.js');
                 console.log('Service Worker registered:', registration);
             } catch (error) {
                 console.log('Service Worker registration failed:', error);
@@ -81,7 +81,7 @@ class YandexMusicApp {
             // Handle album_id parameter
             try {
                 this.showLoading();
-                const response = await fetch(`/api/album-tracks?id=${albumId}&name=Album`);
+                const response = await fetch(`api/album-tracks?id=${albumId}&name=Album`);
                 if (response.ok) {
                     const data = await response.json();
                     this.searchResults = data.tracks || [];
@@ -150,7 +150,7 @@ class YandexMusicApp {
         this.showLoading();
         
         try {
-            const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+            const response = await fetch(`api/search?q=${encodeURIComponent(query)}`);
             if (!response.ok) {
                 throw new Error('Search failed');
             }
@@ -354,7 +354,7 @@ class YandexMusicApp {
         this.showStatus('Loading track...');
         
         try {
-            const response = await fetch(`/api/download-url?id=${this.currentTrack.id}`);
+            const response = await fetch(`api/download-url?id=${this.currentTrack.id}`);
             if (!response.ok) {
                 throw new Error('Failed to get track URL');
             }
@@ -465,7 +465,7 @@ class YandexMusicApp {
         }
 
         try {
-            const response = await fetch(`/api/download-url?id=${this.currentTrack.id}`);
+            const response = await fetch(`api/download-url?id=${this.currentTrack.id}`);
             if (!response.ok) {
                 throw new Error('Failed to get download URL');
             }
@@ -504,7 +504,7 @@ class YandexMusicApp {
         console.log('[App] Loading album tracks:', { albumId, albumName });
         
         try {
-            const response = await fetch(`/api/album-tracks?id=${albumId}&name=${encodeURIComponent(albumName)}`);
+            const response = await fetch(`api/album-tracks?id=${albumId}&name=${encodeURIComponent(albumName)}`);
             console.log('[App] Album tracks response:', {
                 status: response.status,
                 ok: response.ok,
@@ -591,7 +591,7 @@ class YandexMusicApp {
         this.showStatus(`Loading tracks by: ${artistName}`);
         
         try {
-            const response = await fetch(`/api/artist-tracks?id=${artistId}&name=${encodeURIComponent(artistName)}`);
+            const response = await fetch(`api/artist-tracks?id=${artistId}&name=${encodeURIComponent(artistName)}`);
             if (!response.ok) {
                 throw new Error('Failed to load artist tracks');
             }

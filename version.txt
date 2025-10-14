@@ -1,4 +1,22 @@
-2.0.4
+2.1
+Reverse proxy base path support
+
+## Version 2.1 - Reverse Proxy Support
+
+### 🌐 Base Path Configuration (PR #12)
+- Added `BASE_PATH` environment variable support for reverse proxy deployments
+- Automatic path adjustment for static files and API endpoints
+- HTML `<base>` tag injection for proper resource loading
+- Service worker updates to handle base paths correctly
+- Support for hosting at subpaths (e.g., `/music/` instead of root)
+- Updated documentation with Apache and Nginx configuration examples
+
+### 📝 Documentation
+- Added reverse proxy setup guide in README
+- Environment variable configuration in `.env.example`
+- Examples for Apache and Nginx proxy configuration
+
+## Version 2.0.4
 Major release with comprehensive PWA features, enhanced search, and complete testing infrastructure
 
 ## Version 2.0 - Comprehensive Feature Update

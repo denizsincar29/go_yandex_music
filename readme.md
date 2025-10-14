@@ -131,6 +131,48 @@ The web server exposes the following REST API endpoints:
 
 All endpoints return JSON and support CORS for browser access.
 
+### Reverse Proxy Configuration
+
+If you're hosting the web app behind a reverse proxy (e.g., Apache, Nginx) at a subpath, you need to set the `BASE_PATH` environment variable.
+
+**Example: Hosting at `denizsincar.ru/music/`**
+
+1. Set the `BASE_PATH` environment variable:
+```sh
+export BASE_PATH=/music
+```
+
+Or add it to your `.env` file:
+```
+BASE_PATH=/music
+```
+
+2. Configure your reverse proxy to forward requests to the Go server:
+
+**Apache Example:**
+```apache
+ProxyPass /music/ http://localhost:8080/music/
+ProxyPassReverse /music/ http://localhost:8080/music/
+```
+
+**Nginx Example:**
+```nginx
+location /music/ {
+    proxy_pass http://localhost:8080/music/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+}
+```
+
+3. Start the web server normally - it will automatically use the `BASE_PATH`:
+```sh
+./ya_music_web
+```
+
+The application will automatically adjust all URLs (static files, API endpoints) to work with the specified base path.
+
+**Note:** The `BASE_PATH` should start with `/` and NOT end with `/` (e.g., `/music`, not `music` or `/music/`).
+
 ### CLI Application
 
 Run the CLI player:

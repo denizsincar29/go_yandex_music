@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 	"pkg.botr.me/yamusic"
@@ -14,8 +15,9 @@ import (
 
 // WebServer handles HTTP requests for the web interface
 type WebServer struct {
-	client *yamusic.Client
-	ctx    context.Context
+	client   *yamusic.Client
+	ctx      context.Context
+	basePath string
 }
 
 // TrackResponse represents a track in API responses
@@ -89,8 +91,21 @@ func NewWebServer(ctx context.Context) (*WebServer, error) {
 	if err != nil {
 		return nil, err
 	}
+	
+	// Get base path from environment variable (e.g., "/music" for reverse proxy)
+	basePath := os.Getenv("BASE_PATH")
+	if basePath != "" {
+		// Ensure base path starts with / and doesn't end with /
+		if basePath[0] != '/' {
+			basePath = "/" + basePath
+		}
+		if len(basePath) > 1 && basePath[len(basePath)-1] == '/' {
+			basePath = basePath[:len(basePath)-1]
+		}
+	}
+	
 	client := yamusic.NewClient(yamusic.AccessToken(uid, token))
-	return &WebServer{client: client, ctx: ctx}, nil
+	return &WebServer{client: client, ctx: ctx, basePath: basePath}, nil
 }
 
 // handleSearch handles track search requests
@@ -478,6 +493,35 @@ func enableCORS(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// handleIndex serves the index.html with base path injected
+func (ws *WebServer) handleIndex(w http.ResponseWriter, r *http.Request) {
+	// Read the index.html file
+	indexContent, err := os.ReadFile("./static/index.html")
+	if err != nil {
+		http.Error(w, "Failed to load index.html", http.StatusInternalServerError)
+		return
+	}
+
+	content := string(indexContent)
+	
+	// Inject base path using a <base> tag and window.BASE_PATH variable
+	basePath := ws.basePath
+	if basePath == "" {
+		basePath = "/"
+	} else if basePath[len(basePath)-1] != '/' {
+		basePath = basePath + "/"
+	}
+	
+	baseTag := "<base href=\"" + basePath + "\">\n    "
+	basePathScript := "<script>window.BASE_PATH = '" + ws.basePath + "';</script>\n    "
+	
+	// Insert after <head> tag
+	content = strings.Replace(content, "<head>\n", "<head>\n    "+baseTag+basePathScript, 1)
+	
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write([]byte(content))
+}
+
 // StartWebServer starts the HTTP server
 func StartWebServer(port string) error {
 	ctx := context.Background()
@@ -486,17 +530,51 @@ func StartWebServer(port string) error {
 		return err
 	}
 
-	// Serve static files
-	fs := http.FileServer(http.Dir("./static"))
-	http.Handle("/", fs)
+	// Create a new ServeMux for routing
+	mux := http.NewServeMux()
 
-	// API endpoints
-	http.HandleFunc("/api/search", enableCORS(ws.handleSearch))
-	http.HandleFunc("/api/download-url", enableCORS(ws.handleDownloadURL))
-	http.HandleFunc("/api/album-tracks", enableCORS(ws.handleAlbumTracks))
-	http.HandleFunc("/api/artist-tracks", enableCORS(ws.handleArtistTracks))
+	// Serve static files with base path
+	fs := http.FileServer(http.Dir("./static"))
+	if ws.basePath != "" {
+		// Handle both base path and base path with trailing slash
+		basePathHandler := func(w http.ResponseWriter, r *http.Request) {
+			// If exactly the base path (no trailing slash), serve index
+			if r.URL.Path == ws.basePath {
+				ws.handleIndex(w, r)
+			} else {
+				// Strip base path and serve static files
+				http.StripPrefix(ws.basePath, fs).ServeHTTP(w, r)
+			}
+		}
+		mux.HandleFunc(ws.basePath+"/", basePathHandler)
+		// Also handle exact base path without trailing slash
+		mux.HandleFunc(ws.basePath, ws.handleIndex)
+		
+		// API endpoints with base path
+		mux.HandleFunc(ws.basePath+"/api/search", enableCORS(ws.handleSearch))
+		mux.HandleFunc(ws.basePath+"/api/download-url", enableCORS(ws.handleDownloadURL))
+		mux.HandleFunc(ws.basePath+"/api/album-tracks", enableCORS(ws.handleAlbumTracks))
+		mux.HandleFunc(ws.basePath+"/api/artist-tracks", enableCORS(ws.handleArtistTracks))
+		log.Printf("Starting web server on http://localhost:%s%s\n", port, ws.basePath)
+	} else {
+		// No base path - serve at root
+		// Handle root path specifically to inject base path
+		rootHandler := func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/" || r.URL.Path == "/index.html" {
+				ws.handleIndex(w, r)
+			} else {
+				fs.ServeHTTP(w, r)
+			}
+		}
+		mux.HandleFunc("/", rootHandler)
+		// API endpoints at root
+		mux.HandleFunc("/api/search", enableCORS(ws.handleSearch))
+		mux.HandleFunc("/api/download-url", enableCORS(ws.handleDownloadURL))
+		mux.HandleFunc("/api/album-tracks", enableCORS(ws.handleAlbumTracks))
+		mux.HandleFunc("/api/artist-tracks", enableCORS(ws.handleArtistTracks))
+		log.Printf("Starting web server on http://localhost:%s\n", port)
+	}
 
 	addr := ":" + port
-	log.Printf("Starting web server on http://localhost%s\n", addr)
-	return http.ListenAndServe(addr, nil)
+	return http.ListenAndServe(addr, mux)
 }

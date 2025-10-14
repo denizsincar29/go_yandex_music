@@ -1,12 +1,23 @@
 // Service Worker for Yandex Music PWA
-const CACHE_NAME = 'yandex-music-pwa-v5';
+const CACHE_NAME = 'yandex-music-pwa-v6';
+
+// Get base path from the service worker's location
+// The service worker is registered from the page which has the base path
+const getBasePath = () => {
+  const scriptURL = self.location.pathname;
+  const basePath = scriptURL.substring(0, scriptURL.lastIndexOf('/'));
+  return basePath || '';
+};
+
+const BASE_PATH = getBasePath();
+
 const urlsToCache = [
-  '/',
-  '/index.html',
-  '/css/styles.css',
-  '/js/app.js',
-  '/manifest.json'
-];
+  BASE_PATH + '/',
+  BASE_PATH + '/index.html',
+  BASE_PATH + '/css/styles.css',
+  BASE_PATH + '/js/app.js',
+  BASE_PATH + '/manifest.json'
+].map(url => url.replace('//', '/')); // Clean up double slashes
 
 // Install event - cache static assets
 self.addEventListener('install', (event) => {
@@ -26,6 +37,7 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
+          // Delete all old caches (including v5)
           if (cacheName !== CACHE_NAME) {
             console.log('Deleting old cache:', cacheName);
             return caches.delete(cacheName);

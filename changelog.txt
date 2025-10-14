@@ -1,0 +1,40 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+## [2.2] - 2025-10-14
+
+### Fixed
+- Fixed autoplay race condition with search query parameters (`?search=query&autoplay=1`)
+- Fixed play button not working when no track is loaded
+- Removed arbitrary 500ms timeout that caused intermittent autoplay failures
+- Play button now automatically loads and plays first track from search results
+
+### Improved
+- More responsive autoplay by awaiting search completion instead of arbitrary timeout
+- Better user experience with intelligent audio player controls
+- More deterministic behavior without timing-based race conditions
+
+### Technical Details
+- Added 'play' event listener to audio element to detect play button press without source
+- Changed autoplay implementation to properly await search results before attempting playback
+- Applied fix to both search and album autoplay flows
+
+## [2.1] - Previous Release
+
+### Added
+- Reverse proxy base path support
+- `BASE_PATH` environment variable for deployment at subpaths
+- Automatic path adjustment for static files and API endpoints
+- HTML `<base>` tag injection for proper resource loading
+- Service worker updates to handle base paths correctly
+
+### Documentation
+- Added reverse proxy setup guide
+- Apache and Nginx configuration examples
+
+## [2.0.4] - Previous Release
+
+Major release with comprehensive PWA features, enhanced search, and complete testing infrastructure.
+
+See version.txt for complete changelog history of all previous versions.

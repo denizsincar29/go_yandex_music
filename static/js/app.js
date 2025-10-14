@@ -34,6 +34,16 @@ class YandexMusicApp {
         this.audioPlayer.addEventListener('ended', () => this.handleTrackEnded());
         this.audioPlayer.addEventListener('error', (e) => this.handleAudioError(e));
         
+        // Handle play button press when no track is loaded
+        this.audioPlayer.addEventListener('play', (e) => {
+            // If play is triggered but there's no source or current track, load the first track
+            if (!this.audioPlayer.src && this.searchResults.length > 0 && !this.currentTrack) {
+                e.preventDefault();
+                this.audioPlayer.pause();
+                this.playTrack(0);
+            }
+        });
+        
         // Media key support
         if ('mediaSession' in navigator) {
             navigator.mediaSession.setActionHandler('previoustrack', () => this.playPrevious());
@@ -72,10 +82,8 @@ class YandexMusicApp {
             await this.handleSearch({ preventDefault: () => {} });
             
             if (autoplay && this.searchResults.length > 0) {
-                // Wait a bit for results to be displayed
-                setTimeout(() => {
-                    this.playTrack(0);
-                }, 500);
+                // Play immediately after search completes, no arbitrary timeout needed
+                await this.playTrack(0);
             }
         } else if (albumId) {
             // Handle album_id parameter
@@ -124,9 +132,7 @@ class YandexMusicApp {
                     });
                     
                     if (autoplay && this.searchResults.length > 0) {
-                        setTimeout(() => {
-                            this.playTrack(0);
-                        }, 500);
+                        await this.playTrack(0);
                     }
                     
                     this.showStatus(`Loaded ${this.searchResults.length} tracks from album`);

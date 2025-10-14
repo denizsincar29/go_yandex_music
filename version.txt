@@ -1,5 +1,19 @@
-2.1
-Reverse proxy base path support
+2.2
+Audio player autoplay and playback fixes
+
+## Version 2.2 - Audio Player Fixes
+
+### 🐛 Bug Fixes (PR #19)
+- Fixed autoplay race condition with search query parameters
+- Fixed play button not working when no track is loaded
+- Removed arbitrary 500ms timeout for autoplay
+- Added intelligent play event listener to auto-load first track
+- Improved reliability of `?search=query&autoplay=1` URL parameter
+
+### 🎵 Improvements
+- Play button now automatically loads first track from search results when pressed
+- More responsive autoplay - removed unnecessary delays
+- Better user experience with smart audio player controls
 
 ## Version 2.1 - Reverse Proxy Support
 

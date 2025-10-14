@@ -375,6 +375,79 @@ func TestHandleIndexWithBasePath(t *testing.T) {
 	}
 }
 
+// TestBasePathNoRedirect tests that accessing base path doesn't cause redirect
+func TestBasePathNoRedirect(t *testing.T) {
+	// Create a temporary static directory with index.html
+	tmpDir := t.TempDir()
+	staticDir := tmpDir + "/static"
+	if err := os.MkdirAll(staticDir, 0755); err != nil {
+		t.Fatalf("Failed to create temp static dir: %v", err)
+	}
+
+	// Create a simple index.html
+	indexHTML := "<head>\n<title>Test</title>\n</head>\n<body>Test</body>"
+	if err := os.WriteFile(staticDir+"/index.html", []byte(indexHTML), 0644); err != nil {
+		t.Fatalf("Failed to write index.html: %v", err)
+	}
+
+	// Change to temp directory
+	oldDir, _ := os.Getwd()
+	defer os.Chdir(oldDir)
+	os.Chdir(tmpDir)
+
+	// Create WebServer with base path
+	ws := &WebServer{
+		ctx:      context.Background(),
+		basePath: "/music",
+	}
+
+	// Create a test server to verify no redirects occur
+	mux := http.NewServeMux()
+	fs := http.FileServer(http.Dir("./static"))
+	
+	basePathHandler := func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		
+		if path == ws.basePath || path == ws.basePath+"/" {
+			ws.handleIndex(w, r)
+			return
+		}
+		
+		if strings.HasPrefix(path, ws.basePath+"/") {
+			http.StripPrefix(ws.basePath, fs).ServeHTTP(w, r)
+			return
+		}
+		
+		http.NotFound(w, r)
+	}
+	
+	mux.HandleFunc(ws.basePath, basePathHandler)
+	mux.HandleFunc(ws.basePath+"/", basePathHandler)
+
+	// Test /music without trailing slash - should NOT redirect
+	req := httptest.NewRequest("GET", "/music", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code == http.StatusMovedPermanently || w.Code == http.StatusFound {
+		t.Errorf("Expected no redirect for /music, but got %d with Location: %s", 
+			w.Code, w.Header().Get("Location"))
+	}
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d for /music, got %d", http.StatusOK, w.Code)
+	}
+
+	// Test /music/ with trailing slash - should also work
+	req = httptest.NewRequest("GET", "/music/", nil)
+	w = httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d for /music/, got %d", http.StatusOK, w.Code)
+	}
+}
+
 // TestAlbumTracksIntegration tests the album tracks endpoint with actual API
 func TestAlbumTracksIntegration(t *testing.T) {
 	if os.Getenv("YA_MUSIC_TOKEN") == "" || os.Getenv("YA_MUSIC_ID") == "" {

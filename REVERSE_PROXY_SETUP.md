@@ -44,8 +44,11 @@ Add this to your Apache configuration:
     ServerName example.com
     
     # Proxy the /music path to the Go application
+    # Note: Both /music and /music/ work without redirects
     ProxyPass /music/ http://localhost:8080/music/
     ProxyPassReverse /music/ http://localhost:8080/music/
+    ProxyPass /music http://localhost:8080/music
+    ProxyPassReverse /music http://localhost:8080/music
     
     # Optional: Add headers
     ProxyPreserveHost On
@@ -63,8 +66,12 @@ For HTTPS:
     SSLCertificateFile /path/to/cert.pem
     SSLCertificateKeyFile /path/to/key.pem
     
+    # Proxy the /music path to the Go application
+    # Note: Both /music and /music/ work without redirects
     ProxyPass /music/ http://localhost:8080/music/
     ProxyPassReverse /music/ http://localhost:8080/music/
+    ProxyPass /music http://localhost:8080/music
+    ProxyPassReverse /music http://localhost:8080/music
     
     ProxyPreserveHost On
     RequestHeader set X-Forwarded-Proto "https"
@@ -80,6 +87,16 @@ server {
     listen 80;
     server_name example.com;
     
+    # Handle both /music and /music/ paths
+    location ~ ^/music/?$ {
+        proxy_pass http://localhost:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    
+    # Handle sub-paths like /music/api/*, /music/css/*, etc.
     location /music/ {
         proxy_pass http://localhost:8080/music/;
         proxy_set_header Host $host;
@@ -100,6 +117,16 @@ server {
     ssl_certificate /path/to/cert.pem;
     ssl_certificate_key /path/to/key.pem;
     
+    # Handle both /music and /music/ paths
+    location ~ ^/music/?$ {
+        proxy_pass http://localhost:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    
+    # Handle sub-paths like /music/api/*, /music/css/*, etc.
     location /music/ {
         proxy_pass http://localhost:8080/music/;
         proxy_set_header Host $host;
@@ -135,11 +162,13 @@ All static resources and API calls use relative URLs:
 - API: `api/search` → `/music/api/search`
 
 ### 3. Server Routing
-The Go server automatically prefixes all routes with the base path:
+The Go server automatically prefixes all routes with the base path and handles both with and without trailing slashes:
 
+- Index: Both `/music` and `/music/` → serves HTML with injected base tag (no redirect)
 - Static files: `/music/` → serves from `./static/`
 - API endpoints: `/music/api/search` → API handler
-- Index: `/music` → serves HTML with injected base tag
+
+**Note:** The application handles both `/music` and `/music/` without any redirects, making it compatible with various reverse proxy configurations.
 
 ### 4. Service Worker
 The service worker automatically detects its base path from its own URL and adjusts cached resources accordingly.
@@ -164,6 +193,22 @@ After configuring your reverse proxy, access:
 - Try searching for music to verify API calls work
 
 ## Troubleshooting
+
+### Path Doubling Issue (/music/music)
+
+**Problem:** Accessing `/music` results in `/music/music` or causes path doubling.
+
+**Solution:**
+This was an issue in earlier versions where the app would redirect `/music` to `/music/`, which could cause problems with certain reverse proxy configurations. This has been fixed in the current version:
+
+1. The application now handles both `/music` and `/music/` without any HTTP redirects
+2. Update your reverse proxy configuration to handle both paths as shown in the examples above
+3. Ensure your proxy configuration doesn't add extra path prefixes
+
+If you're still experiencing this issue:
+1. Verify you're using the latest version of the application
+2. Check your reverse proxy configuration matches the examples above
+3. Test accessing `http://localhost:8080/music` directly (without the proxy) to verify the app works correctly
 
 ### Static Files Return 404
 

@@ -535,19 +535,33 @@ func StartWebServer(port string) error {
 	// Serve static files with base path
 	fs := http.FileServer(http.Dir("./static"))
 	if ws.basePath != "" {
-		// Handle both base path and base path with trailing slash
+		// Unified handler for base path - handles both with and without trailing slash
+		// Using a single pattern prevents Go's ServeMux from auto-redirecting
 		basePathHandler := func(w http.ResponseWriter, r *http.Request) {
-			// If exactly the base path (no trailing slash) or base path with trailing slash, serve index
-			if r.URL.Path == ws.basePath || r.URL.Path == ws.basePath+"/" {
+			path := r.URL.Path
+			
+			// Handle exact base path (with or without trailing slash) - serve index
+			if path == ws.basePath || path == ws.basePath+"/" {
 				ws.handleIndex(w, r)
-			} else {
-				// Strip base path and serve static files
-				http.StripPrefix(ws.basePath, fs).ServeHTTP(w, r)
+				return
 			}
+			
+			// Handle sub-paths under base path - strip prefix and serve static files
+			if strings.HasPrefix(path, ws.basePath+"/") {
+				http.StripPrefix(ws.basePath, fs).ServeHTTP(w, r)
+				return
+			}
+			
+			// Path doesn't match our base path
+			http.NotFound(w, r)
 		}
+		
+		// Register handler for base path without trailing slash
+		// This prevents ServeMux from auto-redirecting /music to /music/
+		mux.HandleFunc(ws.basePath, basePathHandler)
+		
+		// Register handler for base path with trailing slash to catch all sub-paths
 		mux.HandleFunc(ws.basePath+"/", basePathHandler)
-		// Also handle exact base path without trailing slash
-		mux.HandleFunc(ws.basePath, ws.handleIndex)
 
 		// API endpoints with base path
 		mux.HandleFunc(ws.basePath+"/api/search", enableCORS(ws.handleSearch))

@@ -15,9 +15,10 @@ import (
 
 // WebServer handles HTTP requests for the web interface
 type WebServer struct {
-	client   *yamusic.Client
-	ctx      context.Context
-	basePath string
+	client          *yamusic.Client
+	ctx             context.Context
+	basePath        string // Static base path from env var (fallback)
+	useProxyHeaders bool   // Whether to check X-Forwarded-Prefix header
 }
 
 // TrackResponse represents a track in API responses
@@ -93,6 +94,7 @@ func NewWebServer(ctx context.Context) (*WebServer, error) {
 	}
 
 	// Get base path from environment variable (e.g., "/music" for reverse proxy)
+	// This serves as a fallback when X-Forwarded-Prefix header is not present
 	basePath := os.Getenv("BASE_PATH")
 	if basePath != "" {
 		// Ensure base path starts with / and doesn't end with /
@@ -104,8 +106,38 @@ func NewWebServer(ctx context.Context) (*WebServer, error) {
 		}
 	}
 
+	// Check if we should use proxy headers (modern cloud-native approach)
+	// Default to true for better reverse proxy compatibility
+	useProxyHeaders := os.Getenv("USE_PROXY_HEADERS") != "false"
+
 	client := yamusic.NewClient(yamusic.AccessToken(uid, token))
-	return &WebServer{client: client, ctx: ctx, basePath: basePath}, nil
+	return &WebServer{
+		client:          client,
+		ctx:             ctx,
+		basePath:        basePath,
+		useProxyHeaders: useProxyHeaders,
+	}, nil
+}
+
+// getBasePath returns the base path for a request
+// It checks X-Forwarded-Prefix header first (if enabled), then falls back to static BASE_PATH
+func (ws *WebServer) getBasePath(r *http.Request) string {
+	// Check X-Forwarded-Prefix header first (modern approach)
+	if ws.useProxyHeaders {
+		if prefix := r.Header.Get("X-Forwarded-Prefix"); prefix != "" {
+			// Clean the prefix
+			if prefix[0] != '/' {
+				prefix = "/" + prefix
+			}
+			if len(prefix) > 1 && prefix[len(prefix)-1] == '/' {
+				prefix = prefix[:len(prefix)-1]
+			}
+			return prefix
+		}
+	}
+	
+	// Fall back to static base path from env var
+	return ws.basePath
 }
 
 // handleSearch handles track search requests
@@ -503,16 +535,17 @@ func (ws *WebServer) handleIndex(w http.ResponseWriter, r *http.Request) {
 
 	content := string(indexContent)
 
-	// Inject base path using a <base> tag and window.BASE_PATH variable
-	basePath := ws.basePath
-	if basePath == "" {
-		basePath = "/"
-	} else if basePath[len(basePath)-1] != '/' {
-		basePath = basePath + "/"
+	// Get dynamic base path (supports X-Forwarded-Prefix header)
+	basePath := ws.getBasePath(r)
+	basePathForTag := basePath
+	if basePathForTag == "" {
+		basePathForTag = "/"
+	} else if basePathForTag[len(basePathForTag)-1] != '/' {
+		basePathForTag = basePathForTag + "/"
 	}
 
-	baseTag := "<base href=\"" + basePath + "\">\n    "
-	basePathScript := "<script>window.BASE_PATH = '" + ws.basePath + "';</script>\n    "
+	baseTag := "<base href=\"" + basePathForTag + "\">\n    "
+	basePathScript := "<script>window.BASE_PATH = '" + basePath + "';</script>\n    "
 
 	// Insert after <head> tag
 	content = strings.Replace(content, "<head>\n", "<head>\n    "+baseTag+basePathScript, 1)
@@ -534,44 +567,91 @@ func StartWebServer(port string) error {
 
 	// Serve static files with base path
 	fs := http.FileServer(http.Dir("./static"))
-	if ws.basePath != "" {
-		// Handle both base path and base path with trailing slash
-		basePathHandler := func(w http.ResponseWriter, r *http.Request) {
-			// If exactly the base path (no trailing slash) or base path with trailing slash, serve index
-			if r.URL.Path == ws.basePath || r.URL.Path == ws.basePath+"/" {
-				ws.handleIndex(w, r)
-			} else {
-				// Strip base path and serve static files
-				http.StripPrefix(ws.basePath, fs).ServeHTTP(w, r)
-			}
-		}
-		mux.HandleFunc(ws.basePath+"/", basePathHandler)
-		// Also handle exact base path without trailing slash
-		mux.HandleFunc(ws.basePath, ws.handleIndex)
-
-		// API endpoints with base path
-		mux.HandleFunc(ws.basePath+"/api/search", enableCORS(ws.handleSearch))
-		mux.HandleFunc(ws.basePath+"/api/download-url", enableCORS(ws.handleDownloadURL))
-		mux.HandleFunc(ws.basePath+"/api/album-tracks", enableCORS(ws.handleAlbumTracks))
-		mux.HandleFunc(ws.basePath+"/api/artist-tracks", enableCORS(ws.handleArtistTracks))
-		log.Printf("Starting web server on http://localhost:%s%s\n", port, ws.basePath)
-	} else {
-		// No base path - serve at root
-		// Handle root path specifically to inject base path
-		rootHandler := func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == "/" || r.URL.Path == "/index.html" {
+	
+	// Universal handler that works with both static BASE_PATH and dynamic X-Forwarded-Prefix
+	universalHandler := func(w http.ResponseWriter, r *http.Request) {
+		basePath := ws.getBasePath(r)
+		path := r.URL.Path
+		
+		// If we have a base path from header but no static BASE_PATH,
+		// we're in proxy mode - serve everything and inject base path into HTML
+		if basePath != "" && ws.basePath == "" && ws.useProxyHeaders {
+			// Proxy has already stripped the prefix, serve normally
+			if path == "/" || path == "/index.html" {
 				ws.handleIndex(w, r)
 			} else {
 				fs.ServeHTTP(w, r)
 			}
+			return
 		}
-		mux.HandleFunc("/", rootHandler)
+		
+		// If we have a static base path, check if request matches it
+		if basePath != "" {
+			// Handle exact base path (with or without trailing slash) - serve index
+			if path == basePath || path == basePath+"/" {
+				ws.handleIndex(w, r)
+				return
+			}
+			
+			// Handle sub-paths under base path - strip prefix and serve static files
+			if strings.HasPrefix(path, basePath+"/") {
+				http.StripPrefix(basePath, fs).ServeHTTP(w, r)
+				return
+			}
+			
+			// Path doesn't match our base path
+			http.NotFound(w, r)
+			return
+		}
+		
+		// No base path - serve at root
+		if path == "/" || path == "/index.html" {
+			ws.handleIndex(w, r)
+		} else {
+			fs.ServeHTTP(w, r)
+		}
+	}
+	
+	// API handler wrapper that supports dynamic base path
+	apiHandler := func(handler http.HandlerFunc) http.HandlerFunc {
+		return enableCORS(func(w http.ResponseWriter, r *http.Request) {
+			handler(w, r)
+		})
+	}
+	
+	if ws.basePath != "" {
+		// Static base path mode (backwards compatible)
+		// Register handler for base path without trailing slash
+		mux.HandleFunc(ws.basePath, universalHandler)
+		// Register handler for base path with trailing slash to catch all sub-paths
+		mux.HandleFunc(ws.basePath+"/", universalHandler)
+		
+		// API endpoints with base path
+		mux.HandleFunc(ws.basePath+"/api/search", apiHandler(ws.handleSearch))
+		mux.HandleFunc(ws.basePath+"/api/download-url", apiHandler(ws.handleDownloadURL))
+		mux.HandleFunc(ws.basePath+"/api/album-tracks", apiHandler(ws.handleAlbumTracks))
+		mux.HandleFunc(ws.basePath+"/api/artist-tracks", apiHandler(ws.handleArtistTracks))
+		
+		if ws.useProxyHeaders {
+			log.Printf("Starting web server on http://localhost:%s%s (X-Forwarded-Prefix enabled)\n", port, ws.basePath)
+		} else {
+			log.Printf("Starting web server on http://localhost:%s%s\n", port, ws.basePath)
+		}
+	} else {
+		// Root path mode - also supports X-Forwarded-Prefix if enabled
+		mux.HandleFunc("/", universalHandler)
+		
 		// API endpoints at root
-		mux.HandleFunc("/api/search", enableCORS(ws.handleSearch))
-		mux.HandleFunc("/api/download-url", enableCORS(ws.handleDownloadURL))
-		mux.HandleFunc("/api/album-tracks", enableCORS(ws.handleAlbumTracks))
-		mux.HandleFunc("/api/artist-tracks", enableCORS(ws.handleArtistTracks))
-		log.Printf("Starting web server on http://localhost:%s\n", port)
+		mux.HandleFunc("/api/search", apiHandler(ws.handleSearch))
+		mux.HandleFunc("/api/download-url", apiHandler(ws.handleDownloadURL))
+		mux.HandleFunc("/api/album-tracks", apiHandler(ws.handleAlbumTracks))
+		mux.HandleFunc("/api/artist-tracks", apiHandler(ws.handleArtistTracks))
+		
+		if ws.useProxyHeaders {
+			log.Printf("Starting web server on http://localhost:%s (X-Forwarded-Prefix enabled)\n", port)
+		} else {
+			log.Printf("Starting web server on http://localhost:%s\n", port)
+		}
 	}
 
 	addr := ":" + port

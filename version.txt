@@ -1,2 +1,10 @@
-1.0.3
-Added systemd service creator script, URL parameter support, and updated branding
+1.0.4
+Fixed GitHub Actions workflow and updated dependencies
+
+## Changes Since 1.0.2
+- Added systemd service creator script for easy deployment
+- Implemented URL parameter support for deep linking (search and album autoplay)
+- Updated branding with new title and footer
+- Enhanced release automation with auto-changelog generation
+- Fixed GoReleaser configuration to point to correct main package location
+- Updated all GitHub Actions to latest versions (checkout v5, setup-go v6, github-script v8, goreleaser-action v8)

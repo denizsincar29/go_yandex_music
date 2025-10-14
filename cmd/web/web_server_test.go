@@ -397,8 +397,9 @@ func TestBasePathNoRedirect(t *testing.T) {
 
 	// Create WebServer with base path
 	ws := &WebServer{
-		ctx:      context.Background(),
-		basePath: "/music",
+		ctx:             context.Background(),
+		basePath:        "/music",
+		useProxyHeaders: false,
 	}
 
 	// Create a test server to verify no redirects occur
@@ -445,6 +446,111 @@ func TestBasePathNoRedirect(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status %d for /music/, got %d", http.StatusOK, w.Code)
+	}
+}
+
+// TestXForwardedPrefix tests X-Forwarded-Prefix header support
+func TestXForwardedPrefix(t *testing.T) {
+	// Create a temporary static directory with index.html
+	tmpDir := t.TempDir()
+	staticDir := tmpDir + "/static"
+	if err := os.MkdirAll(staticDir, 0755); err != nil {
+		t.Fatalf("Failed to create temp static dir: %v", err)
+	}
+
+	// Create a simple index.html
+	indexHTML := "<head>\n<title>Test</title>\n</head>\n<body>Test</body>"
+	if err := os.WriteFile(staticDir+"/index.html", []byte(indexHTML), 0644); err != nil {
+		t.Fatalf("Failed to write index.html: %v", err)
+	}
+
+	// Change to temp directory
+	oldDir, _ := os.Getwd()
+	defer os.Chdir(oldDir)
+	os.Chdir(tmpDir)
+
+	// Create WebServer with proxy headers enabled, no static base path
+	ws := &WebServer{
+		ctx:             context.Background(),
+		basePath:        "",
+		useProxyHeaders: true,
+	}
+
+	// Test with X-Forwarded-Prefix header
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("X-Forwarded-Prefix", "/music")
+	w := httptest.NewRecorder()
+
+	ws.handleIndex(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
+	}
+
+	body := w.Body.String()
+
+	// Check that base tag uses the forwarded prefix
+	if !strings.Contains(body, `<base href="/music/">`) {
+		t.Errorf("Expected base tag with href='/music/', but not found in response")
+		t.Logf("Response body: %s", body)
+	}
+
+	// Check that BASE_PATH script uses the forwarded prefix
+	if !strings.Contains(body, `window.BASE_PATH = '/music'`) {
+		t.Errorf("Expected BASE_PATH script with '/music', but not found in response")
+		t.Logf("Response body: %s", body)
+	}
+}
+
+// TestXForwardedPrefixFallback tests fallback to BASE_PATH when header is not present
+func TestXForwardedPrefixFallback(t *testing.T) {
+	// Create a temporary static directory with index.html
+	tmpDir := t.TempDir()
+	staticDir := tmpDir + "/static"
+	if err := os.MkdirAll(staticDir, 0755); err != nil {
+		t.Fatalf("Failed to create temp static dir: %v", err)
+	}
+
+	// Create a simple index.html
+	indexHTML := "<head>\n<title>Test</title>\n</head>\n<body>Test</body>"
+	if err := os.WriteFile(staticDir+"/index.html", []byte(indexHTML), 0644); err != nil {
+		t.Fatalf("Failed to write index.html: %v", err)
+	}
+
+	// Change to temp directory
+	oldDir, _ := os.Getwd()
+	defer os.Chdir(oldDir)
+	os.Chdir(tmpDir)
+
+	// Create WebServer with both proxy headers and static base path
+	ws := &WebServer{
+		ctx:             context.Background(),
+		basePath:        "/api",
+		useProxyHeaders: true,
+	}
+
+	// Test without X-Forwarded-Prefix header - should use BASE_PATH
+	req := httptest.NewRequest("GET", "/", nil)
+	w := httptest.NewRecorder()
+
+	ws.handleIndex(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
+	}
+
+	body := w.Body.String()
+
+	// Check that base tag uses the static BASE_PATH
+	if !strings.Contains(body, `<base href="/api/">`) {
+		t.Errorf("Expected base tag with href='/api/', but not found in response")
+		t.Logf("Response body: %s", body)
+	}
+
+	// Check that BASE_PATH script uses the static BASE_PATH
+	if !strings.Contains(body, `window.BASE_PATH = '/api'`) {
+		t.Errorf("Expected BASE_PATH script with '/api', but not found in response")
+		t.Logf("Response body: %s", body)
 	}
 }
 

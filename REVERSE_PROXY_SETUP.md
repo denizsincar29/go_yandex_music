@@ -4,6 +4,47 @@ This guide explains how to deploy the Yandex Music Player web application behind
 
 ## Quick Start
 
+### Modern Approach: X-Forwarded-Prefix Header (Recommended)
+
+The application now supports the `X-Forwarded-Prefix` header, which is the modern cloud-native way to handle base paths. Your reverse proxy simply adds this header, and the app automatically adjusts.
+
+**Nginx Example:**
+```nginx
+location /music/ {
+    proxy_pass http://localhost:8080/;
+    proxy_set_header X-Forwarded-Prefix /music;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+**Apache Example:**
+```apache
+<Location /music>
+    ProxyPass http://localhost:8080/
+    ProxyPassReverse http://localhost:8080/
+    RequestHeader set X-Forwarded-Prefix "/music"
+    ProxyPreserveHost On
+</Location>
+```
+
+**Benefits:**
+- ✅ No BASE_PATH environment variable needed
+- ✅ Dynamic - change paths without restarting the app
+- ✅ Works like FastAPI/Uvicorn's proxy headers
+- ✅ Enabled by default
+
+**To disable X-Forwarded-Prefix support:**
+```bash
+USE_PROXY_HEADERS=false ./ya_music_web
+```
+
+### Legacy Approach: BASE_PATH Environment Variable
+
+You can still use the static BASE_PATH environment variable if you prefer:
+
 ### 1. Set the Base Path Environment Variable
 
 Add `BASE_PATH` to your `.env` file or export it before starting the server:

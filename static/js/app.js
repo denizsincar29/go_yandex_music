@@ -43,6 +43,9 @@ class YandexMusicApp {
         // Register service worker for PWA
         this.registerServiceWorker();
         
+        // Handle URL parameters
+        this.handleUrlParameters();
+        
         console.log('Yandex Music PWA initialized');
     }
 
@@ -53,6 +56,84 @@ class YandexMusicApp {
                 console.log('Service Worker registered:', registration);
             } catch (error) {
                 console.log('Service Worker registration failed:', error);
+            }
+        }
+    }
+
+    async handleUrlParameters() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const search = urlParams.get('search');
+        const albumId = urlParams.get('album_id');
+        const autoplay = urlParams.get('autoplay') === '1';
+        
+        if (search) {
+            // Handle search parameter
+            this.searchInput.value = search.replace(/\+/g, ' ');
+            await this.handleSearch({ preventDefault: () => {} });
+            
+            if (autoplay && this.searchResults.length > 0) {
+                // Wait a bit for results to be displayed
+                setTimeout(() => {
+                    this.playTrack(0);
+                }, 500);
+            }
+        } else if (albumId) {
+            // Handle album_id parameter
+            try {
+                this.showLoading();
+                const response = await fetch(`/api/album-tracks?id=${albumId}&name=Album`);
+                if (response.ok) {
+                    const data = await response.json();
+                    this.searchResults = data.tracks || [];
+                    
+                    this.searchResultsContainer.innerHTML = '';
+                    const albumHeader = document.createElement('h2');
+                    albumHeader.textContent = `Album (${this.searchResults.length} tracks)`;
+                    albumHeader.className = 'results-header';
+                    this.searchResultsContainer.appendChild(albumHeader);
+                    
+                    this.searchResults.forEach((track, index) => {
+                        const resultItem = document.createElement('div');
+                        resultItem.className = 'result-item';
+                        resultItem.setAttribute('role', 'button');
+                        resultItem.setAttribute('tabindex', '0');
+                        resultItem.setAttribute('aria-label', `Play ${track.title} by ${track.artist}`);
+                        
+                        resultItem.innerHTML = `
+                            ${track.coverUrl ? 
+                                `<img src="${track.coverUrl}" alt="${track.title} cover" class="result-cover" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                                 <div class="result-cover" style="display:none;"></div>` : 
+                                '<div class="result-cover"></div>'
+                            }
+                            <div class="result-info">
+                                <div class="result-title">${this.escapeHtml(track.title)}</div>
+                                <div class="result-artist">${this.escapeHtml(track.artist)}</div>
+                            </div>
+                            <div class="result-duration">${this.formatDuration(track.duration)}</div>
+                        `;
+                        
+                        resultItem.addEventListener('click', () => this.playTrack(index));
+                        resultItem.addEventListener('keypress', (e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                this.playTrack(index);
+                            }
+                        });
+                        
+                        this.searchResultsContainer.appendChild(resultItem);
+                    });
+                    
+                    if (autoplay && this.searchResults.length > 0) {
+                        setTimeout(() => {
+                            this.playTrack(0);
+                        }, 500);
+                    }
+                    
+                    this.showStatus(`Loaded ${this.searchResults.length} tracks from album`);
+                }
+            } catch (error) {
+                console.error('Album loading error:', error);
+                this.showError('Failed to load album. Please try again.');
             }
         }
     }

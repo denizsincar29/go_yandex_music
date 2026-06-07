@@ -719,6 +719,101 @@ func (ws *WebServer) handleAlbumZip(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[AlbumZip] Done streaming zip for album '%s'", albumName)
 }
 
+// handleTrackInfo fetches metadata for a single track by ID
+func (ws *WebServer) handleTrackInfo(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	trackIDStr := r.URL.Query().Get("id")
+	if trackIDStr == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "query parameter 'id' is required"})
+		return
+	}
+
+	req, err := ws.client.NewRequest("GET", "tracks/"+trackIDStr, nil)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	var apiResp struct {
+		Result []struct {
+			ID         int    `json:"id"`
+			Title      string `json:"title"`
+			DurationMs int    `json:"durationMs"`
+			Available  bool   `json:"available"`
+			CoverURI   string `json:"coverUri"`
+			Artists    []struct {
+				ID   int    `json:"id"`
+				Name string `json:"name"`
+			} `json:"artists"`
+			Albums []struct {
+				ID       int    `json:"id"`
+				Title    string `json:"title"`
+				CoverURI string `json:"coverUri"`
+			} `json:"albums"`
+		} `json:"result"`
+	}
+
+	resp, err := ws.client.Do(ws.ctx, req, &apiResp)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
+		return
+	}
+	if resp.StatusCode != 200 {
+		w.WriteHeader(resp.StatusCode)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: resp.Status})
+		return
+	}
+	if len(apiResp.Result) == 0 {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "track not found"})
+		return
+	}
+
+	t := apiResp.Result[0]
+	artistStr := ""
+	artists := make([]string, len(t.Artists))
+	artistIDs := make([]int, len(t.Artists))
+	for j, a := range t.Artists {
+		artists[j] = a.Name
+		artistIDs[j] = a.ID
+		if j > 0 {
+			artistStr += ", "
+		}
+		artistStr += a.Name
+	}
+
+	album := ""
+	albumID := 0
+	coverURL := ""
+	if len(t.Albums) > 0 {
+		album = t.Albums[0].Title
+		albumID = t.Albums[0].ID
+		if t.Albums[0].CoverURI != "" {
+			coverURL = "https://" + t.Albums[0].CoverURI
+		}
+	}
+	if coverURL == "" && t.CoverURI != "" {
+		coverURL = "https://" + t.CoverURI
+	}
+
+	json.NewEncoder(w).Encode(TrackResponse{
+		ID:        t.ID,
+		Title:     t.Title,
+		Artist:    artistStr,
+		Artists:   artists,
+		ArtistIDs: artistIDs,
+		Album:     album,
+		AlbumID:   albumID,
+		Duration:  t.DurationMs,
+		CoverURL:  coverURL,
+		Available: t.Available,
+	})
+}
+
 // StartWebServer starts the HTTP server
 func StartWebServer(port string) error {
 	ctx := context.Background()
@@ -797,6 +892,7 @@ func StartWebServer(port string) error {
 		mux.HandleFunc(ws.basePath+"/api/album-tracks", apiHandler(ws.handleAlbumTracks))
 		mux.HandleFunc(ws.basePath+"/api/artist-tracks", apiHandler(ws.handleArtistTracks))
 		mux.HandleFunc(ws.basePath+"/api/album-zip", apiHandler(ws.handleAlbumZip))
+		mux.HandleFunc(ws.basePath+"/api/track-info", apiHandler(ws.handleTrackInfo))
 		
 		if ws.useProxyHeaders {
 			log.Printf("Starting web server on http://localhost:%s%s (X-Forwarded-Prefix enabled)\n", port, ws.basePath)
@@ -813,6 +909,7 @@ func StartWebServer(port string) error {
 		mux.HandleFunc("/api/album-tracks", apiHandler(ws.handleAlbumTracks))
 		mux.HandleFunc("/api/artist-tracks", apiHandler(ws.handleArtistTracks))
 		mux.HandleFunc("/api/album-zip", apiHandler(ws.handleAlbumZip))
+		mux.HandleFunc("/api/track-info", apiHandler(ws.handleTrackInfo))
 		
 		if ws.useProxyHeaders {
 			log.Printf("Starting web server on http://localhost:%s (X-Forwarded-Prefix enabled)\n", port)

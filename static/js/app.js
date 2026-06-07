@@ -87,11 +87,50 @@ class YandexMusicApp {
         }
     }
 
+    // ── Yandex Music URL parser ────────────────────────────────────────────────
+    // Supported formats:
+    //   https://music.yandex.ru/album/12345
+    //   https://music.yandex.ru/album/12345/track/67890
+    //   https://music.yandex.com/album/12345
+    //   https://music.yandex.com/album/12345/track/67890
+    // Returns { type: 'album'|'track', albumId, trackId } or null
+    parseYandexUrl(input) {
+        const s = input.trim();
+        // Must look like a URL
+        if (!s.includes('music.yandex.')) return null;
+        try {
+            // Allow pasting bare URLs without scheme
+            const url = new URL(s.startsWith('http') ? s : 'https://' + s);
+            if (!url.hostname.includes('music.yandex.')) return null;
+            // pathname: /album/12345 or /album/12345/track/67890
+            const m = url.pathname.match(/\/album\/(\d+)(?:\/track\/(\d+))?/);
+            if (!m) return null;
+            return {
+                type:    m[2] ? 'track' : 'album',
+                albumId: m[1],
+                trackId: m[2] || null,
+            };
+        } catch {
+            return null;
+        }
+    }
+
     // ── Search ───────────────────────────────────────────────────────────────
     async handleSearch(e) {
         e.preventDefault();
         const query = this.searchInput.value.trim();
         if (query.length < 3) { this.showStatus('Please enter at least 3 characters'); return; }
+
+        // ── Yandex Music URL? Handle directly ────────────────────────────────
+        const parsed = this.parseYandexUrl(query);
+        if (parsed) {
+            if (parsed.type === 'track') {
+                await this.loadTrackById(parsed.trackId, parsed.albumId);
+            } else {
+                await this.loadAlbumTracks(parsed.albumId, '');
+            }
+            return;
+        }
 
         this.showLoading();
         try {
@@ -257,6 +296,46 @@ class YandexMusicApp {
             if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.loadArtistTracks(artist.id, artist.name); }
         });
         this.searchResultsContainer.appendChild(item);
+    }
+
+    // ── Load single track by ID (from URL) ────────────────────────────────────
+    async loadTrackById(trackId, albumId) {
+        this.showLoading();
+        this.showStatus('Loading track…');
+        try {
+            const resp = await fetch(`api/track-info?id=${trackId}`);
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                throw new Error(err.error || 'Failed to load track');
+            }
+            const track = await resp.json();
+
+            // Put it in a one-item playlist so prev/next logic still works
+            this.searchResults = [track];
+            this.currentAlbumInfo = null;
+
+            // Show track in results panel with option to open its album
+            this.searchResultsContainer.innerHTML = '';
+            const header = document.createElement('h2');
+            header.className = 'results-header';
+            header.textContent = 'Track from URL';
+            this.searchResultsContainer.appendChild(header);
+
+            if (track.albumId) {
+                const albumBtn = document.createElement('button');
+                albumBtn.className = 'back-button';
+                albumBtn.setAttribute('aria-label', `Open album ${track.album || 'containing this track'}`);
+                albumBtn.textContent = `📀 Open album: ${track.album || 'View album'}`;
+                albumBtn.onclick = () => this.loadAlbumTracks(track.albumId, track.album || '');
+                this.searchResultsContainer.appendChild(albumBtn);
+            }
+
+            this.appendTrackItem(track, 0);
+            await this.playTrack(0);
+        } catch (err) {
+            console.error(err);
+            this.showError(`Could not load track: ${err.message}`);
+        }
     }
 
     // ── Load album tracks ─────────────────────────────────────────────────────

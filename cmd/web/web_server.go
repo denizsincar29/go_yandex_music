@@ -719,7 +719,8 @@ func (ws *WebServer) handleAlbumZip(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[AlbumZip] Done streaming zip for album '%s'", albumName)
 }
 
-// handleTrackInfo fetches metadata for a single track by ID
+// handleTrackInfo fetches metadata for a single track by ID.
+// Uses the library's Tracks().Get() method (yamusic.TrackResp.Result []Track).
 func (ws *WebServer) handleTrackInfo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -730,33 +731,15 @@ func (ws *WebServer) handleTrackInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req, err := ws.client.NewRequest("GET", "tracks/"+trackIDStr, nil)
+	trackID, err := strconv.Atoi(trackIDStr)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "invalid track ID"})
 		return
 	}
 
-	var apiResp struct {
-		Result []struct {
-			ID         int    `json:"id"`
-			Title      string `json:"title"`
-			DurationMs int    `json:"durationMs"`
-			Available  bool   `json:"available"`
-			CoverURI   string `json:"coverUri"`
-			Artists    []struct {
-				ID   int    `json:"id"`
-				Name string `json:"name"`
-			} `json:"artists"`
-			Albums []struct {
-				ID       int    `json:"id"`
-				Title    string `json:"title"`
-				CoverURI string `json:"coverUri"`
-			} `json:"albums"`
-		} `json:"result"`
-	}
-
-	resp, err := ws.client.Do(ws.ctx, req, &apiResp)
+	// Use the library's native method — no manual NewRequest/Do needed
+	trackResp, resp, err := ws.client.Tracks().Get(ws.ctx, trackID)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
@@ -767,13 +750,14 @@ func (ws *WebServer) handleTrackInfo(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(ErrorResponse{Error: resp.Status})
 		return
 	}
-	if len(apiResp.Result) == 0 {
+	if len(trackResp.Result) == 0 {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(ErrorResponse{Error: "track not found"})
 		return
 	}
 
-	t := apiResp.Result[0]
+	t := trackResp.Result[0] // yamusic.Track
+
 	artistStr := ""
 	artists := make([]string, len(t.Artists))
 	artistIDs := make([]int, len(t.Artists))

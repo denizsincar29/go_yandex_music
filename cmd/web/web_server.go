@@ -11,7 +11,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/joho/godotenv"
 	"pkg.botr.me/yamusic"
@@ -640,82 +639,67 @@ func (ws *WebServer) handleAlbumZip(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[AlbumZip] Streaming %d tracks for album '%s'", len(tracks), albumName)
 
 	// Sanitize album name for filename
-	safeAlbum := strings.Map(func(r rune) rune {
-		if strings.ContainsRune(`/\:*?"<>|`, r) {
-			return '_'
-		}
-		return r
-	}, albumName)
+	sanitize := func(s string) string {
+		return strings.Map(func(r rune) rune {
+			if strings.ContainsRune(`/\:*?"<>|`, r) {
+				return '_'
+			}
+			return r
+		}, s)
+	}
 
 	w.Header().Set("Content-Type", "application/zip")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.zip"`, safeAlbum))
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.zip"`, sanitize(albumName)))
+	// Disable buffering so Firefox sees bytes immediately
+	if fl, ok := w.(http.Flusher); ok {
+		fl.Flush()
+	}
 
 	zw := zip.NewWriter(w)
-	defer zw.Close()
 
-	// Download tracks concurrently with a semaphore (max 3 parallel)
-	type result struct {
-		idx  int
-		info trackInfo
-		url  string
-		err  error
-	}
-
-	sem := make(chan struct{}, 3)
-	results := make([]result, len(tracks))
-	var wg sync.WaitGroup
-
+	// Process each track sequentially: get fresh URL → download → write → flush.
+	// This avoids URL expiry (TTL ~1 min) that occurs when all URLs are
+	// pre-fetched and only used later.
 	for i, t := range tracks {
-		wg.Add(1)
-		go func(i int, t trackInfo) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			url, err := ws.client.Tracks().GetDownloadURL(ws.ctx, t.id)
-			results[i] = result{i, t, url, err}
-		}(i, t)
-	}
-	wg.Wait()
+		safeFilename := fmt.Sprintf("%02d. %s - %s.mp3", i+1, sanitize(t.artist), sanitize(t.title))
+		log.Printf("[AlbumZip] [%d/%d] %s", i+1, len(tracks), safeFilename)
 
-	// Write to zip in order
-	for i, res := range results {
-		if res.err != nil {
-			log.Printf("[AlbumZip] Failed to get URL for track %d '%s': %v", res.info.id, res.info.title, res.err)
+		// Fresh download URL for this track
+		dlURL, err := ws.client.Tracks().GetDownloadURL(ws.ctx, t.id)
+		if err != nil {
+			log.Printf("[AlbumZip] Failed to get URL for '%s': %v — skipping", safeFilename, err)
 			continue
 		}
 
-		safeTitle := strings.Map(func(r rune) rune {
-			if strings.ContainsRune(`/\:*?"<>|`, r) {
-				return '_'
-			}
-			return r
-		}, res.info.title)
-		safeArtist := strings.Map(func(r rune) rune {
-			if strings.ContainsRune(`/\:*?"<>|`, r) {
-				return '_'
-			}
-			return r
-		}, res.info.artist)
-
-		filename := fmt.Sprintf("%02d. %s - %s.mp3", i+1, safeArtist, safeTitle)
-
-		fw, err := zw.Create(filename)
+		// Create zip entry
+		fw, err := zw.Create(safeFilename)
 		if err != nil {
-			log.Printf("[AlbumZip] Failed to create zip entry for '%s': %v", filename, err)
+			log.Printf("[AlbumZip] Failed to create zip entry for '%s': %v — skipping", safeFilename, err)
 			continue
 		}
 
-		trackResp, err := http.Get(res.url) //nolint:gosec
+		// Stream track audio into zip entry
+		trackResp, err := http.Get(dlURL) //nolint:gosec
 		if err != nil {
-			log.Printf("[AlbumZip] Failed to download track '%s': %v", filename, err)
+			log.Printf("[AlbumZip] Failed to download '%s': %v — skipping", safeFilename, err)
 			continue
 		}
 		_, copyErr := io.Copy(fw, trackResp.Body)
 		trackResp.Body.Close()
 		if copyErr != nil {
-			log.Printf("[AlbumZip] Failed to copy track '%s': %v", filename, copyErr)
+			log.Printf("[AlbumZip] Copy error for '%s': %v", safeFilename, copyErr)
+		}
+
+		// Flush after each track so the browser receives data and doesn't time out
+		if err := zw.Flush(); err != nil {
+			log.Printf("[AlbumZip] Flush error after '%s': %v", safeFilename, err)
+		}
+		if fl, ok := w.(http.Flusher); ok {
+			fl.Flush()
 		}
 	}
+
+	zw.Close()
 	log.Printf("[AlbumZip] Done streaming zip for album '%s'", albumName)
 }
 

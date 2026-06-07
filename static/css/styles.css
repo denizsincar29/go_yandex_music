@@ -528,3 +528,40 @@ footer {
     outline-offset: 2px;
 }
 
+
+/* ── Active / now-playing track highlight ─────────────────────────────────── */
+.result-item.active {
+    border-left: 4px solid var(--primary-color);
+    background-color: color-mix(in srgb, var(--primary-color) 10%, var(--surface));
+    padding-left: calc(1rem - 4px);
+}
+
+.result-item.active .result-title {
+    color: var(--primary-color);
+    font-weight: 700;
+}
+
+/* ── ZIP download button ────────────────────────────────────────────────────── */
+.zip-btn {
+    background-color: var(--secondary-color);
+    color: #000;
+    border: none;
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    border-radius: 8px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    transition: opacity 0.2s;
+}
+
+.zip-btn:hover {
+    opacity: 0.85;
+}
+
+.zip-btn:focus {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}

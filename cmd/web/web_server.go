@@ -1,13 +1,17 @@
 package main
 
 import (
+	"archive/zip"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/joho/godotenv"
 	"pkg.botr.me/yamusic"
@@ -554,6 +558,167 @@ func (ws *WebServer) handleIndex(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(content))
 }
 
+// handleAlbumZip downloads all tracks from an album and streams them as a zip archive
+func (ws *WebServer) handleAlbumZip(w http.ResponseWriter, r *http.Request) {
+	albumIDStr := r.URL.Query().Get("id")
+	albumName := r.URL.Query().Get("name")
+
+	if albumIDStr == "" || albumName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "query parameters 'id' and 'name' are required"})
+		return
+	}
+
+	albumID, err := strconv.Atoi(albumIDStr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "invalid album ID"})
+		return
+	}
+	_ = albumID
+
+	// Fetch album tracks first
+	req, err := ws.client.NewRequest("GET", "albums/"+albumIDStr+"/with-tracks", nil)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	var apiResp struct {
+		Result struct {
+			Volumes [][]struct {
+				ID         json.Number `json:"id"`
+				Title      string      `json:"title"`
+				Available  bool        `json:"available"`
+				Artists    []struct {
+					Name string `json:"name"`
+				} `json:"artists"`
+			} `json:"volumes"`
+		} `json:"result"`
+	}
+
+	resp, err := ws.client.Do(ws.ctx, req, &apiResp)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
+		return
+	}
+	if resp.StatusCode != 200 {
+		w.WriteHeader(resp.StatusCode)
+		json.NewEncoder(w).Encode(ErrorResponse{Error: resp.Status})
+		return
+	}
+
+	type trackInfo struct {
+		id     int
+		title  string
+		artist string
+	}
+
+	var tracks []trackInfo
+	for _, volume := range apiResp.Result.Volumes {
+		for _, t := range volume {
+			if !t.Available {
+				continue
+			}
+			idInt, err := t.ID.Int64()
+			if err != nil {
+				continue
+			}
+			artistStr := ""
+			for j, a := range t.Artists {
+				if j > 0 {
+					artistStr += ", "
+				}
+				artistStr += a.Name
+			}
+			tracks = append(tracks, trackInfo{int(idInt), t.Title, artistStr})
+		}
+	}
+
+	log.Printf("[AlbumZip] Streaming %d tracks for album '%s'", len(tracks), albumName)
+
+	// Sanitize album name for filename
+	safeAlbum := strings.Map(func(r rune) rune {
+		if strings.ContainsRune(`/\:*?"<>|`, r) {
+			return '_'
+		}
+		return r
+	}, albumName)
+
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.zip"`, safeAlbum))
+
+	zw := zip.NewWriter(w)
+	defer zw.Close()
+
+	// Download tracks concurrently with a semaphore (max 3 parallel)
+	type result struct {
+		idx  int
+		info trackInfo
+		url  string
+		err  error
+	}
+
+	sem := make(chan struct{}, 3)
+	results := make([]result, len(tracks))
+	var wg sync.WaitGroup
+
+	for i, t := range tracks {
+		wg.Add(1)
+		go func(i int, t trackInfo) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			url, err := ws.client.Tracks().GetDownloadURL(ws.ctx, t.id)
+			results[i] = result{i, t, url, err}
+		}(i, t)
+	}
+	wg.Wait()
+
+	// Write to zip in order
+	for i, res := range results {
+		if res.err != nil {
+			log.Printf("[AlbumZip] Failed to get URL for track %d '%s': %v", res.info.id, res.info.title, res.err)
+			continue
+		}
+
+		safeTitle := strings.Map(func(r rune) rune {
+			if strings.ContainsRune(`/\:*?"<>|`, r) {
+				return '_'
+			}
+			return r
+		}, res.info.title)
+		safeArtist := strings.Map(func(r rune) rune {
+			if strings.ContainsRune(`/\:*?"<>|`, r) {
+				return '_'
+			}
+			return r
+		}, res.info.artist)
+
+		filename := fmt.Sprintf("%02d. %s - %s.mp3", i+1, safeArtist, safeTitle)
+
+		fw, err := zw.Create(filename)
+		if err != nil {
+			log.Printf("[AlbumZip] Failed to create zip entry for '%s': %v", filename, err)
+			continue
+		}
+
+		trackResp, err := http.Get(res.url) //nolint:gosec
+		if err != nil {
+			log.Printf("[AlbumZip] Failed to download track '%s': %v", filename, err)
+			continue
+		}
+		_, copyErr := io.Copy(fw, trackResp.Body)
+		trackResp.Body.Close()
+		if copyErr != nil {
+			log.Printf("[AlbumZip] Failed to copy track '%s': %v", filename, copyErr)
+		}
+	}
+	log.Printf("[AlbumZip] Done streaming zip for album '%s'", albumName)
+}
+
 // StartWebServer starts the HTTP server
 func StartWebServer(port string) error {
 	ctx := context.Background()
@@ -631,6 +796,7 @@ func StartWebServer(port string) error {
 		mux.HandleFunc(ws.basePath+"/api/download-url", apiHandler(ws.handleDownloadURL))
 		mux.HandleFunc(ws.basePath+"/api/album-tracks", apiHandler(ws.handleAlbumTracks))
 		mux.HandleFunc(ws.basePath+"/api/artist-tracks", apiHandler(ws.handleArtistTracks))
+		mux.HandleFunc(ws.basePath+"/api/album-zip", apiHandler(ws.handleAlbumZip))
 		
 		if ws.useProxyHeaders {
 			log.Printf("Starting web server on http://localhost:%s%s (X-Forwarded-Prefix enabled)\n", port, ws.basePath)
@@ -646,6 +812,7 @@ func StartWebServer(port string) error {
 		mux.HandleFunc("/api/download-url", apiHandler(ws.handleDownloadURL))
 		mux.HandleFunc("/api/album-tracks", apiHandler(ws.handleAlbumTracks))
 		mux.HandleFunc("/api/artist-tracks", apiHandler(ws.handleArtistTracks))
+		mux.HandleFunc("/api/album-zip", apiHandler(ws.handleAlbumZip))
 		
 		if ws.useProxyHeaders {
 			log.Printf("Starting web server on http://localhost:%s (X-Forwarded-Prefix enabled)\n", port)

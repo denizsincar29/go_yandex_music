@@ -19,6 +19,7 @@ class YandexMusicApp {
         this.prevBtn = document.getElementById('prev-btn');
         this.nextBtn = document.getElementById('next-btn');
         this.downloadBtn = document.getElementById('download-btn');
+        this.downloadAlbumBtn = document.getElementById('download-album-btn');
         this.statusMessage = document.getElementById('status-message');
 
         this.init();
@@ -29,6 +30,11 @@ class YandexMusicApp {
         this.prevBtn.addEventListener('click', () => this.playPrevious());
         this.nextBtn.addEventListener('click', () => this.playNext());
         this.downloadBtn.addEventListener('click', () => this.downloadTrack());
+        this.downloadAlbumBtn.addEventListener('click', () => {
+            if (this.currentAlbumInfo) {
+                this.downloadAlbumZip(this.currentAlbumInfo.id, this.currentAlbumInfo.name);
+            }
+        });
 
         // Auto-play next when track ends
         this.audioPlayer.addEventListener('ended', () => this.handleTrackEnded());
@@ -142,6 +148,7 @@ class YandexMusicApp {
             this.albums        = data.albums  || [];
             this.artists       = data.artists || [];
             this.currentAlbumInfo = null;
+            this.updateAlbumDownloadBtn();
 
             this.previousSearchResults = {
                 tracks: this.searchResults,
@@ -313,6 +320,7 @@ class YandexMusicApp {
             // Put it in a one-item playlist so prev/next logic still works
             this.searchResults = [track];
             this.currentAlbumInfo = null;
+            this.updateAlbumDownloadBtn();
 
             // Show track in results panel with option to open its album
             this.searchResultsContainer.innerHTML = '';
@@ -351,6 +359,7 @@ class YandexMusicApp {
 
             this.searchResults = data.tracks || [];
             this.currentAlbumInfo = { id: albumId, name: albumName || 'Album' };
+            this.updateAlbumDownloadBtn();
 
             this.searchResultsContainer.innerHTML = '';
 
@@ -413,6 +422,7 @@ class YandexMusicApp {
 
             this.searchResults = data.tracks || [];
             this.currentAlbumInfo = null;
+            this.updateAlbumDownloadBtn();
 
             this.searchResultsContainer.innerHTML = '';
 
@@ -605,6 +615,19 @@ class YandexMusicApp {
             if (el) el.classList.add('active');
         }
         this.showStatus('Returned to search results');
+    }
+
+    updateAlbumDownloadBtn() {
+        if (this.currentAlbumInfo) {
+            this.downloadAlbumBtn.hidden = false;
+            this.downloadAlbumBtn.disabled = false;
+            this.downloadAlbumBtn.setAttribute('aria-label',
+                `Download album "${this.currentAlbumInfo.name}" as ZIP`);
+        } else {
+            this.downloadAlbumBtn.hidden = true;
+            this.downloadAlbumBtn.disabled = true;
+            this.downloadAlbumBtn.setAttribute('aria-label', 'Download current album as ZIP');
+        }
     }
 
     // ── Utilities ─────────────────────────────────────────────────────────────

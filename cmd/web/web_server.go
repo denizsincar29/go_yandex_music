@@ -784,8 +784,11 @@ func (ws *WebServer) handleTrackInfo(w http.ResponseWriter, r *http.Request) {
 		coverURL = "https://" + t.CoverURI
 	}
 
+	// Track.ID is a string in the library ("12345"), convert to int for our API
+	trackIDInt, _ := strconv.Atoi(t.ID)
+
 	json.NewEncoder(w).Encode(TrackResponse{
-		ID:        t.ID,
+		ID:        trackIDInt,
 		Title:     t.Title,
 		Artist:    artistStr,
 		Artists:   artists,

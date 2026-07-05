@@ -75,21 +75,67 @@ class YandexMusicApp {
     }
 
     // ── URL parameter handling ───────────────────────────────────────────────
+    // Supported params (any of these can be put in a link to this site):
+    //   ?track_id=123                     — open (and auto-play) a single track
+    //   ?album_id=123[&album_name=...]    — open an album
+    //   ?artist_id=123[&artist_name=...]  — open an artist's tracks
+    //   ?search=query[&autoplay=1]        — run a search, optionally auto-play first result
+    //   &download=1                       — additionally trigger a download once loaded
+    //     (works together with track_id or album_id)
     async handleUrlParameters() {
         const p = new URLSearchParams(window.location.search);
-        const search  = p.get('search');
-        const albumId = p.get('album_id');
-        const autoplay = p.get('autoplay') === '1';
+        const search     = p.get('search');
+        const albumId    = p.get('album_id');
+        const albumName  = p.get('album_name') || '';
+        const artistId   = p.get('artist_id');
+        const artistName = p.get('artist_name') || '';
+        const trackId    = p.get('track_id');
+        const autoplay   = p.get('autoplay') === '1';
+        const download   = p.get('download') === '1';
 
-        if (search) {
+        if (trackId) {
+            // loadTrackById already plays the track once it's loaded.
+            await this.loadTrackById(trackId, albumId || null);
+            if (download && this.currentTrack) await this.downloadTrack();
+        } else if (search) {
             this.searchInput.value = search.replace(/\+/g, ' ');
             await this.handleSearch({ preventDefault: () => {} });
             if (autoplay && this.searchResults.length > 0) await this.playTrack(0);
         } else if (albumId) {
-            // We don't know the name yet — fetch with a blank name then let
-            // the API return whatever the album is actually called.
-            await this.loadAlbumTracks(albumId, '');
+            // If album_name wasn't given, fetch with a blank name and let the
+            // API return whatever the album is actually called.
+            await this.loadAlbumTracks(albumId, albumName);
             if (autoplay && this.searchResults.length > 0) await this.playTrack(0);
+            if (download && this.currentAlbumInfo) {
+                this.downloadAlbumZip(albumId, this.currentAlbumInfo.name);
+            }
+        } else if (artistId) {
+            await this.loadArtistTracks(artistId, artistName);
+            if (autoplay && this.searchResults.length > 0) await this.playTrack(0);
+        }
+    }
+
+    // ── Shareable links ──────────────────────────────────────────────────────
+    // Builds an absolute URL back to this same page (respects base path/proxy
+    // prefix automatically, since it's built from the current location).
+    buildShareUrl(params) {
+        const url = new URL(window.location.origin + window.location.pathname);
+        url.search = '';
+        Object.entries(params).forEach(([key, value]) => {
+            if (value !== undefined && value !== null && value !== '') {
+                url.searchParams.set(key, value);
+            }
+        });
+        return url.toString();
+    }
+
+    async copyShareLink(url, what) {
+        try {
+            await navigator.clipboard.writeText(url);
+            this.showStatus(`Link to ${what} copied to clipboard`);
+        } catch (err) {
+            // Clipboard API unavailable (e.g. insecure context) — fall back to a prompt.
+            window.prompt(`Copy this link to ${what}:`, url);
         }
     }
 
@@ -235,6 +281,7 @@ class YandexMusicApp {
                     : ''}
             </div>
             <div class="result-duration">${this.formatDuration(track.duration)}</div>
+            <button type="button" class="icon-btn share-btn" aria-label="Copy link to ${this.escapeHtml(track.title)}">${this.shareIconSvg()}</button>
         `;
 
         item.addEventListener('click', () => this.playTrack(index));
@@ -251,7 +298,24 @@ class YandexMusicApp {
             });
         }
 
+        const shareBtn = item.querySelector('.share-btn');
+        if (shareBtn) {
+            shareBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const url = this.buildShareUrl({ track_id: track.id, album_id: track.albumId || '' });
+                this.copyShareLink(url, `track "${track.title}"`);
+            });
+        }
+
         this.searchResultsContainer.appendChild(item);
+    }
+
+    // Small reusable link/share SVG icon
+    shareIconSvg() {
+        return `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/>
+        </svg>`;
     }
 
     appendAlbumItem(album) {
@@ -272,12 +336,24 @@ class YandexMusicApp {
                 ${album.year       ? `<div class="result-meta">${album.year}</div>` : ''}
                 ${album.trackCount ? `<div class="result-meta">${album.trackCount} tracks</div>` : ''}
             </div>
+            <button type="button" class="icon-btn share-btn" aria-label="Copy link to album ${this.escapeHtml(album.title)}">${this.shareIconSvg()}</button>
         `;
 
         item.addEventListener('click', () => this.loadAlbumTracks(album.id, album.title));
         item.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.loadAlbumTracks(album.id, album.title); }
         });
+
+        const shareBtn = item.querySelector('.share-btn');
+        if (shareBtn) {
+            shareBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const url = this.buildShareUrl({ album_id: album.id, album_name: album.title || '' });
+                this.copyShareLink(url, `album "${album.title}"`);
+            });
+        }
+
         this.searchResultsContainer.appendChild(item);
     }
 
@@ -296,12 +372,24 @@ class YandexMusicApp {
             <div class="result-info">
                 <div class="result-title">${this.escapeHtml(artist.name)}</div>
             </div>
+            <button type="button" class="icon-btn share-btn" aria-label="Copy link to artist ${this.escapeHtml(artist.name)}">${this.shareIconSvg()}</button>
         `;
 
         item.addEventListener('click', () => this.loadArtistTracks(artist.id, artist.name));
         item.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.loadArtistTracks(artist.id, artist.name); }
         });
+
+        const shareBtn = item.querySelector('.share-btn');
+        if (shareBtn) {
+            shareBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const url = this.buildShareUrl({ artist_id: artist.id, artist_name: artist.name || '' });
+                this.copyShareLink(url, `artist "${artist.name}"`);
+            });
+        }
+
         this.searchResultsContainer.appendChild(item);
     }
 
@@ -392,6 +480,17 @@ class YandexMusicApp {
             `;
             zipBtn.onclick = () => this.downloadAlbumZip(albumId, albumName || 'Album');
             headerRow.appendChild(zipBtn);
+
+            const shareAlbumBtn = document.createElement('button');
+            shareAlbumBtn.className = 'control-btn share-btn-inline';
+            shareAlbumBtn.setAttribute('aria-label', `Copy link to album ${albumName || 'Album'}`);
+            shareAlbumBtn.innerHTML = `${this.shareIconSvg()} Copy link`;
+            shareAlbumBtn.onclick = () => {
+                const url = this.buildShareUrl({ album_id: albumId, album_name: albumName || '' });
+                this.copyShareLink(url, `album "${albumName || 'Album'}"`);
+            };
+            headerRow.appendChild(shareAlbumBtn);
+
             this.searchResultsContainer.appendChild(headerRow);
 
             if (this.searchResults.length === 0) {
@@ -434,7 +533,25 @@ class YandexMusicApp {
                 this.searchResultsContainer.appendChild(backBtn);
             }
 
-            this.appendHeader(`Artist: ${artistName}`);
+            const artistHeaderRow = document.createElement('div');
+            artistHeaderRow.style.cssText = 'display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:0.5rem;';
+            const artistH = document.createElement('h2');
+            artistH.className = 'results-header';
+            artistH.style.margin = '0';
+            artistH.textContent = `Artist: ${artistName}`;
+            artistHeaderRow.appendChild(artistH);
+
+            const shareArtistBtn = document.createElement('button');
+            shareArtistBtn.className = 'control-btn share-btn-inline';
+            shareArtistBtn.setAttribute('aria-label', `Copy link to artist ${artistName}`);
+            shareArtistBtn.innerHTML = `${this.shareIconSvg()} Copy link`;
+            shareArtistBtn.onclick = () => {
+                const url = this.buildShareUrl({ artist_id: artistId, artist_name: artistName || '' });
+                this.copyShareLink(url, `artist "${artistName}"`);
+            };
+            artistHeaderRow.appendChild(shareArtistBtn);
+
+            this.searchResultsContainer.appendChild(artistHeaderRow);
 
             if (this.searchResults.length === 0) {
                 const empty = document.createElement('div');
